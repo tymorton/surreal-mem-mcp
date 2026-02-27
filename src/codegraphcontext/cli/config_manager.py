@@ -42,6 +42,7 @@ DEFAULT_CONFIG = {
     # SCIP indexer feature flag (default off — existing Tree-sitter behaviour unchanged)
     "SCIP_INDEXER": "false",
     "SCIP_LANGUAGES": "python,typescript,go,rust,java",
+    "SKIP_EXTERNAL_RESOLUTION": "false",
 }
 
 # Configuration key descriptions
@@ -67,6 +68,7 @@ CONFIG_DESCRIPTIONS = {
     "INDEX_SOURCE": "Store full source code in graph database (for faster indexing use false, for better performance use true)",
     "SCIP_INDEXER": "Use SCIP-based indexing for higher accuracy call/inheritance resolution (requires scip-<lang> tools installed)",
     "SCIP_LANGUAGES": "Comma-separated languages to index via SCIP when SCIP_INDEXER=true (python,typescript,go,rust,java)",
+    "SKIP_EXTERNAL_RESOLUTION": "Skip resolution attempts for external library method calls (recommended for enterprise large Java/Spring codebases)",
 }
 
 # Valid values for each config key
@@ -82,6 +84,7 @@ CONFIG_VALIDATORS = {
     "CACHE_ENABLED": ["true", "false"],
     "INDEX_SOURCE": ["true", "false"],
     "SCIP_INDEXER": ["true", "false"],
+    "SKIP_EXTERNAL_RESOLUTION": ["true", "false"],
 }
 
 

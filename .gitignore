@@ -39,6 +39,18 @@ mcp.json
 # Docker
 docker-compose.yml 
 
+# macOS system files
+.DS_Store
+src/.DS_Store
+src/codegraphcontext/.DS_Store
+
+# PR templates and guides
+CGC_PR_DESCRIPTION.md
+PR_SUBMISSION_GUIDE.txt
+
+# Ignore the PR submission script if not to be tracked
+submit_pr.sh
+
 # yaml file for amazon Q developer
 devfile.yaml 
 

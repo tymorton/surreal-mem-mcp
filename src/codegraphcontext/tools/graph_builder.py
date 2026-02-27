@@ -461,6 +461,9 @@ class GraphBuilder:
         local_imports = {imp.get('alias') or imp['name'].split('.')[-1]: imp['name'] 
                         for imp in file_data.get('imports', [])}
         
+        # Check if we should skip external resolution attempts - 
+        skip_external = (get_config_value("SKIP_EXTERNAL_RESOLUTION") or "false").lower() == "true"
+        
         for call in file_data.get('function_calls', []):
             called_name = call['name']
             if called_name in __builtins__: continue
@@ -517,7 +520,13 @@ class GraphBuilder:
                                     break
             
             if not resolved_path:
-                 warning_logger(f"Could not resolve call {called_name} (lookup: {lookup_name}) in {caller_file_path}")
+                # Only log warning if we're not skipping external resolution
+                if not skip_external:
+                    warning_logger(f"Could not resolve call {called_name} (lookup: {lookup_name}) in {caller_file_path}")
+                # Track that this was an unresolved external call
+                is_unresolved_external = True
+            else:
+                is_unresolved_external = False
             # else:
             #      info_logger(f"Resolved call {called_name} -> {resolved_path}")
             
@@ -539,6 +548,7 @@ class GraphBuilder:
             if not resolved_path:
                 if called_name in local_names:
                     resolved_path = caller_file_path
+                    is_unresolved_external = False  # This is a local call, not external
                 elif called_name in imports_map and imports_map[called_name]:
                     # Check if any path in imports_map for called_name matches current file's imports
                     candidates = imports_map[called_name]
@@ -546,12 +556,17 @@ class GraphBuilder:
                         for imp_name in local_imports.values():
                             if imp_name.replace('.', '/') in path:
                                 resolved_path = path
+                                is_unresolved_external = False  # Found a match
                                 break
                         if resolved_path: break
                     if not resolved_path:
                         resolved_path = candidates[0]
                 else:
                     resolved_path = caller_file_path
+            
+            # Skip creating CALLS relationship for unresolved external calls when skip_external is enabled
+            if skip_external and is_unresolved_external:
+                continue
 
             caller_context = call.get('context')
             if caller_context and len(caller_context) == 3 and caller_context[0] is not None:
