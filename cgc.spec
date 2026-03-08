@@ -62,6 +62,15 @@ add_binary('kuzu', ext)
 if not is_win:
     add_binary('redislite/bin', '*')
     add_binary('falkordblite.scripts', ext)
+    
+    # Also include the python modules as datas if they aren't being picked up
+    def add_package_data(package_name):
+        pkg_path = site_packages / package_name
+        if pkg_path.exists():
+            datas.append((str(pkg_path), package_name))
+            
+    add_package_data('redislite')
+    add_package_data('falkordblite')
 
 # ── 2. Data files ────────────────────────────────────────────────────────────
 datas = []
