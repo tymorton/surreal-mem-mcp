@@ -1,6 +1,6 @@
 # src/codegraphcontext/tools/code_finder.py
 import logging
-import re
+
 from typing import Any, Dict, List, Literal, Optional
 from pathlib import Path
 
@@ -348,7 +348,6 @@ class CodeFinder:
     def what_does_function_call(self, function_name: str, path: Optional[str] = None, repo_path: Optional[str] = None) -> List[Dict]:
         """Find what functions a specific function calls using CALLS relationships"""
         with self.driver.session() as session:
-            repo_filter = "AND called.path STARTS WITH $repo_path" if repo_path else ""
             if path:
                 # Convert path to absolute path
                 absolute_file_path = str(Path(path).resolve())
@@ -513,10 +512,10 @@ class CodeFinder:
     def find_function_overrides(self, function_name: str, repo_path: Optional[str] = None) -> List[Dict]:
         """Find all implementations of a function across different classes"""
         with self.driver.session() as session:
-            repo_filter = "WHERE 1=1 AND class.path STARTS WITH $repo_path" if repo_path else ""
+            repo_filter = "AND class.path STARTS WITH $repo_path" if repo_path else ""
             result = session.run(f"""
                 MATCH (class:Class)-[:CONTAINS]->(func:Function {{name: $function_name}})
-                WHERE 1=1 {{repo_filter}}
+                WHERE 1=1 {repo_filter}
                 OPTIONAL MATCH (file:File)-[:CONTAINS]->(class)
                 RETURN DISTINCT
                     class.name as class_name,
