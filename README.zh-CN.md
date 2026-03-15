@@ -5,6 +5,7 @@
 🌐 **语言 (Languages):**
 - 🇬🇧 [English](README.md)
 - 🇨🇳 [中文](README.zh-CN.md)
+- 🇰🇷 [한국어](README.kor.md)
 - 🇯🇵 日本語 (即将推出)
 - 🇷🇺 Русский (即将推出)
 - 🇪🇸 Español (即将推出)
