@@ -58,6 +58,11 @@ def setup_embedding_model():
         print("\n[!] WARNING: Ensure the model you provide is an **embedding model**, not a conversational LLM.")
         base_url = input("Enter generic OpenAI-compatible base URL (e.g. http://localhost:8000/v1): ").strip()
         model = input("Enter exact embedding model name: ").strip()
+    elif model:
+        override = input(f"\nDefault model: [{model}] — Press Enter to accept or type a different model name: ").strip()
+        if override:
+            model = override
+            print(f"[*] Using custom model: {model}")
 
     print("\n[*] Generating environment config...")
     env_content = f"""PORT=3000

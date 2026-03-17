@@ -15,6 +15,12 @@ use tower_http::cors::CorsLayer;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Handle --version flag
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("surreal-mem-mcp {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     // Try loading from project root first, then fallback to global ~/.surreal-mem-mcp/.env
     let mut home = home::home_dir().unwrap_or_default();
     if dotenvy::dotenv().is_err() && !home.as_os_str().is_empty() {
