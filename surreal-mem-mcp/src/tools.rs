@@ -7,11 +7,12 @@ pub fn list_tools() -> Vec<Value> {
     vec![
         json!({
             "name": "remember",
-            "description": "Store a memory with its embeddings in the Bayesian Graph memory store.",
+            "description": "Store a memory with its embeddings in the Bayesian Graph memory store. For lossless context retrieval, provide a `headline` — a 1-2 sentence compressed summary of the core insight. The agent uses full `text` for precise recall and `headline` for efficient broad context sweeps.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "text": { "type": "string" },
+                    "text": { "type": "string", "description": "The full, complete memory text to store." },
+                    "headline": { "type": "string", "description": "A 1-2 sentence compressed summary of the core insight. Used for lossless context retrieval without flooding the context window. If omitted, the full text is used as fallback." },
                     "scope": { "type": "string", "enum": ["global", "agent", "session"], "description": "The scope of this memory." },
                     "agent_id": { "type": "string", "description": "The ID of the agent (if applicable)." },
                     "session_id": { "type": "string", "description": "The ID of the current session (if applicable)." },
@@ -33,7 +34,7 @@ pub fn list_tools() -> Vec<Value> {
         }),
         json!({
             "name": "search_memory",
-            "description": "Search the memory store using Bayesian Fusion (70% Vector + 30% BM25) and Epistemic Uncertainty checks.",
+            "description": "Search the memory store using Bayesian Fusion (70% Vector + 30% BM25) and Epistemic Uncertainty checks. Use `compressed=true` for efficient broad context sweeps that return only the headline summaries (lossless context mode — 5-10x lower token cost). Use `compressed=false` (default) for precise full-fidelity recall.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -41,7 +42,8 @@ pub fn list_tools() -> Vec<Value> {
                     "scope": { "type": "string", "enum": ["global", "agent", "session"], "description": "The scope of the search." },
                     "agent_id": { "type": "string", "description": "The ID of the agent (if applicable)." },
                     "session_id": { "type": "string", "description": "The ID of the current session (if applicable)." },
-                    "limit": { "type": "integer", "default": 5 }
+                    "limit": { "type": "integer", "default": 5 },
+                    "compressed": { "type": "boolean", "default": false, "description": "If true, returns headline summaries instead of full memory text. Use for broad context sweeps to minimize token consumption." }
                 },
                 "required": ["query", "scope"]
             }
@@ -107,6 +109,7 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
     match name {
         "remember" => {
             let text = args.get("text").and_then(|t| t.as_str()).unwrap_or("");
+            let headline = args.get("headline").and_then(|h| h.as_str());
             let scope = args
                 .get("scope")
                 .and_then(|s| s.as_str())
@@ -116,10 +119,22 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
             let metadata = args.get("metadata").cloned().unwrap_or(json!({}));
 
             let safe_text = crate::security::redactor::redact_sensitive_data(text);
+            let safe_headline = headline.map(|h| crate::security::redactor::redact_sensitive_data(h));
+            let safe_headline_ref = safe_headline.as_deref();
+
+            // Embed the full text for precise vector search
             let emb = openai_client.get_embedding(&safe_text).await.ok();
 
+            // Embed the headline separately so compressed searches can still
+            // use vector similarity against the summary representation.
+            let headline_emb = if let Some(hl) = safe_headline_ref {
+                if !hl.is_empty() {
+                    openai_client.get_embedding(hl).await.ok()
+                } else { None }
+            } else { None };
+
             match db
-                .remember(&safe_text, emb, metadata, scope, agent_id, session_id)
+                .remember(&safe_text, safe_headline_ref, emb, headline_emb, metadata, scope, agent_id, session_id)
                 .await
             {
                 Ok(id) => json!({
@@ -160,11 +175,12 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
             let agent_id = args.get("agent_id").and_then(|a| a.as_str());
             let session_id = args.get("session_id").and_then(|s| s.as_str());
             let limit = args.get("limit").and_then(|l| l.as_u64()).unwrap_or(5) as usize;
+            let compressed = args.get("compressed").and_then(|c| c.as_bool()).unwrap_or(false);
 
             let emb = openai_client.get_embedding(query).await.ok();
 
             match db
-                .bayesian_search(query, emb, limit, scope, agent_id, session_id)
+                .bayesian_search(query, emb, limit, scope, agent_id, session_id, compressed)
                 .await
             {
                 Ok(results) => {

@@ -27,13 +27,21 @@ impl SurrealClient {
         .await?
         .check()?;
 
+        db.query(
+            "DEFINE INDEX fts_headline ON memory FIELDS headline SEARCH ANALYZER puppy_analyzer BM25;",
+        )
+        .await?
+        .check()?;
+
         Ok(Self { db: Arc::new(db) })
     }
 
     pub async fn remember(
         &self,
         text: &str,
+        headline: Option<&str>,
         embedding: Option<Vec<f32>>,
+        headline_embedding: Option<Vec<f32>>,
         metadata: Value,
         scope: &str,
         agent_id: Option<&str>,
@@ -44,6 +52,7 @@ impl SurrealClient {
 
         let mut data = json!({
             "text": text,
+            "headline": headline.unwrap_or(""),
             "created_at": now,
             "accessed_at": now,
             "access_count": 0,
@@ -56,6 +65,9 @@ impl SurrealClient {
 
         if let Some(emb) = &embedding {
             data["embedding"] = json!(emb);
+        }
+        if let Some(h_emb) = &headline_embedding {
+            data["headline_embedding"] = json!(h_emb);
         }
 
         self.db
@@ -117,16 +129,27 @@ impl SurrealClient {
         _scope: &str,
         agent_id: Option<&str>,
         session_id: Option<&str>,
+        compressed: bool,
     ) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
         let mut q = String::new();
+        // When compressed=true, return the headline (1-2 sentence summary) instead of the
+        // full memory text. This is the lossless context memory mode — precise signal,
+        // lower token cost. The LLM can then call search_memory_graph for full fidelity
+        // on the specific memories it needs to expand.
+        let text_field = if compressed {
+            "CASE WHEN headline != '' THEN headline ELSE text END AS text"
+        } else {
+            "text"
+        };
+
 
         if query_emb.is_some() && !query.is_empty() {
             // Full Bayesian Query (Vector + BM25 Priors)
-            q.push_str(r#"
+            q.push_str(&format!(r#"
             SELECT 
                 id, 
-                text,
-                embedding,
+                {text_field},
+                headline,
                 created_at,
                 access_count,
                 bm25_score,
@@ -142,19 +165,19 @@ impl SurrealClient {
                     * (1.0 + (access_count * 0.1))
                 )) AS final_posterior_score
             FROM (
-                SELECT id, text, embedding, created_at, access_count, type::number(count(->related_to)) AS related_count, search::score(1) AS bm25_score
+                SELECT id, text, headline, embedding, created_at, access_count, type::number(count(->related_to)) AS related_count, search::score(1) AS bm25_score
                 FROM memory 
                 WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND embedding <|100|> $query_emb AND text @1@ $query
             )
             ORDER BY final_posterior_score DESC LIMIT $limit;
-            "#);
+            "#, text_field = text_field));
         } else if query_emb.is_some() {
             // Vector Only Bayesian Query
-            q.push_str(r#"
+            q.push_str(&format!(r#"
             SELECT 
                 id, 
-                text,
-                embedding,
+                {text_field},
+                headline,
                 created_at,
                 access_count,
                 (vector::similarity::cosine(embedding, $query_emb)) AS likelihood,
@@ -169,18 +192,19 @@ impl SurrealClient {
                     * (1.0 + (access_count * 0.1))
                 )) AS final_posterior_score
             FROM (
-                SELECT id, text, embedding, created_at, access_count, type::number(count(->related_to)) AS related_count
+                SELECT id, text, headline, embedding, created_at, access_count, type::number(count(->related_to)) AS related_count
                 FROM memory
                 WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND embedding <|100|> $query_emb
             )
             ORDER BY final_posterior_score DESC LIMIT $limit;
-            "#);
+            "#, text_field = text_field));
         } else {
             // BM25 Only Search
-            q.push_str(r#"
+            q.push_str(&format!(r#"
             SELECT 
                 id, 
-                text,
+                {text_field},
+                headline,
                 created_at,
                 access_count,
                 bm25_score AS likelihood,
@@ -195,13 +219,13 @@ impl SurrealClient {
                     * (1.0 + (access_count * 0.1))
                 )) AS final_posterior_score
             FROM (
-                SELECT id, text, created_at, access_count, type::number(count(->related_to)) AS related_count, search::score(1) AS bm25_score
+                SELECT id, text, headline, created_at, access_count, type::number(count(->related_to)) AS related_count, search::score(1) AS bm25_score
                 FROM memory
                 WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND text @1@ $query
                 LIMIT 100
             )
             ORDER BY final_posterior_score DESC LIMIT $limit;
-            "#);
+            "#, text_field = text_field));
         }
 
         let mut stmt = self.db.query(&q).bind(("limit", limit));

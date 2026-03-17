@@ -54,3 +54,83 @@ To achieve enterprise-grade data-at-rest security, `surreal-mem-mcp` utilizes a 
 - Instead of destructively dropping the block, the engine Semantically Redacts the context. For example, `sk-proj-1234` becomes `<REDACTED_OPENAI_API_KEY>`.
 
 This allows the Database volume to remain 100% free of plaintext secrets. If an autonomous framework like Openclaw later queries that memory node, it understands exactly *what* was used, and will natively pivot to its own secure environment manager (e.g., Doppler, HashiCorp Vault) to fetch the valid key just-in-time.
+
+## 6. LLM-in-the-Loop Architecture
+
+A common misconception is that `surreal-mem-mcp` relies *only* on BM25 and vector embeddings — a purely mathematical approach. This is not accurate. The system is designed as **"LLM-Guided Math Retrieval"**, where the LLM actively participates in the retrieval cycle at multiple stages without paying the cost of LLM-as-a-reranker.
+
+Here is exactly where the LLM contributes:
+
+| Stage | Who Does It | How |
+|---|---|---|
+| **Query formulation** | LLM | The LLM writes the natural language query passed to `search_memory`. The quality of the query directly affects vector similarity scores. A better query = more precise retrieval. |
+| **Tool selection** | LLM | The LLM decides *when* to call `search_memory` vs `search_memory_graph`, and with what arguments. It selects the right scope, limit, and depth based on context. |
+| **Memory categorization** | LLM | When calling `remember`, the LLM chooses what to store, which scope to use, and what to put in the `headline` vs `text` fields. This is the primary editorial intelligence layer. |
+| **Scope promotion** | LLM | The LLM decides when to call `promote_memory` to elevate a session-scoped memory to agent or global scope — determining which facts are universally valuable. |
+| **Result interpretation** | LLM | After `search_memory` returns ranked results, the LLM reads them, decides which are relevant, and *ignores* the rest. This is implicit post-retrieval reranking at zero additional token cost. |
+| **Headline authoring** | LLM | The `headline` field is authored by the LLM at store time, providing a compressed representation that enables lossless context sweeps (see Section 7). |
+
+The math layer (Bayesian fusion) handles **scoring and ranking**. The LLM layer handles **editorial decisions and query intelligence**. Together, they achieve precision that neither could alone.
+
+## 7. Lossless Context Memory
+
+The fundamental challenge in long-horizon agent tasks is **context window management**: how do you maintain full memory fidelity without flooding the token window?
+
+### The Problem
+- **Full recall** = inject all retrieved memory text → token bloat → context overflow → degraded reasoning
+- **Hard truncation** = cut memory to fit → loss of nuance → hallucination and continuity breaks
+- **Goal**: Return only what's needed, at the resolution actually needed, every time.
+
+### Dual-Representation Storage
+Each memory stored via `remember` can contain two representations:
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ MEMORY RECORD                                           │
+│                                                         │
+│ text:     "The JWT authentication middleware was broken  │
+│            in prod because the RS256 public key was     │
+│            rotated without updating the .env. Fixed by  │
+│            setting AUTH_PUBLIC_KEY in the k8s secret.   │
+│            Also updated the rotation runbook."          │
+│                                                         │
+│ headline: "JWT auth failed in prod: RS256 key rotation  │
+│            not synced to k8s secrets. Fixed."           │
+│                                                         │
+│ embedding:          [full text vector, 768-dim]         │
+│ headline_embedding: [headline vector, 768-dim]          │
+└─────────────────────────────────────────────────────────┘
+```
+
+The `text` is full-fidelity. The `headline` is a 1-2 sentence compressed summary authored by the LLM at store time.
+
+### Two Retrieval Modes
+
+**Mode 1: Full-Fidelity** (`search_memory` default, `compressed=false`)
+- Returns `text` for all results
+- Use when you need precise details, code references, or full context
+- Higher token cost, maximum resolution
+
+**Mode 2: Compressed / Lossless** (`search_memory` with `compressed=true`)
+- Returns `headline` summaries instead of full `text`
+- 5-10x lower token consumption for typical memories
+- The LLM reads the headlines, identifies which memories are actually relevant, then calls `search_memory_graph` on *those specific IDs* for full fidelity
+- This two-step pattern — sweep compressed, expand precise — is how human memory actually works
+
+### Recommended Agent Pattern
+
+```
+1. Session start:
+   search_memory(query, compressed=true, limit=15)
+   → Get 15 headline summaries cheaply. Identify the 2-3 that matter.
+
+2. Precision recall:
+   search_memory_graph(specific_query, max_depth=5)
+   → Deep-traverse the graph from the relevant memory root. Get full context.
+
+3. During session work:
+   remember(text=<full detail>, headline=<1-2 sentence summary>)
+   → Always provide both representations for future lossless retrieval.
+```
+
+This pattern maintains full memory resolution while keeping the active context window lean — the definition of lossless context memory.
