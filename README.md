@@ -264,4 +264,6 @@ This project stands on the shoulders of incredible open-source infrastructure. W
 Binaries are automatically built for the following architectures:
 - macOS (Apple Silicon: `aarch64` / Intel: `x86_64`)
 - Linux (`aarch64` / `x86_64`)
-- Windows (`aarch64` / `x86_64`)
+- Windows (`x86_64`)
+
+> ⚠️ **Windows ARM64 (e.g. Snapdragon X Elite):** Pre-built binaries are not available for this platform in v0.1.0 due to a build-time incompatibility in a transitive dependency. Windows ARM64 users should [build from source](./CONTRIBUTING.md) using `cargo build --release`.

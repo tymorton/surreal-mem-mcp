@@ -30,4 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Semantic Redaction engine blocks API keys, PII, and payment data from persisting to the local database volume.
 
+### Known Issues
+- **Windows ARM64 not supported in v0.1.0**: Pre-built binaries are not provided for Windows on ARM64 devices (e.g. Snapdragon X Elite laptops). This is caused by a build-time incompatibility in the `ring` crate (a transitive dependency of SurrealDB's TLS stack) when cross-compiling to `aarch64-pc-windows-msvc` on GitHub's CI runners. Windows ARM64 users should build from source using `cargo build --release` inside the `surreal-mem-mcp` directory. This will be resolved in a future release when an updated version of `ring` with ARM64 Windows support is available.
+
 [0.1.0]: https://github.com/tymorton/surreal-mem-mcp/releases/tag/v0.1.0
