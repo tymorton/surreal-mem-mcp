@@ -1,0 +1,8 @@
+# Cursor Guidelines (.cursorrules)
+
+Surreal-MCP is an autonomous edge-native Bayesian memory server for AI agents.
+
+When building or modifying `surreal-mcp` or using it locally as an MCP server:
+- This is a pure Rust project. Avoid introducing Python scripts or heavy external dependencies.
+- Relies heavily on **SurrealDB local RocksDB engine** and **Ollama** for embeddings.
+- Mathematical priors and confidence (entropy) are paramount: DO NOT modify the `final_posterior_score` calculation without serious re-evaluation of Bayesian probabilities. High entropy chunks MUST be filtered into system warnings.

@@ -1,0 +1,27 @@
+# Compiled Rust build artifacts
+/target
+
+# === DATABASE VOLUMES ===
+# Never commit the local RocksDB / SurrealDB data volume to the repository.
+# These contain your personal agent memories and AST graph indices.
+memory_store/
+
+# === ENVIRONMENT FILES ===
+# Local env configs contain embedding API endpoints.
+.env
+.env.local
+
+# === TEST ARTIFACTS ===
+*.log
+test_input.json
+
+# === OS & IDE ===
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# === OPTIONAL ===
+# Cargo.lock is intentionally committed for binary crates (recommended for end-user tools).
+# Uncomment the line below ONLY if this becomes a library crate:
+# Cargo.lock
