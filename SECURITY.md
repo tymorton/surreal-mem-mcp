@@ -2,7 +2,7 @@
 
 ## 📌 Supported Versions
 
-We aim to keep `CodeGraphContext` up to date and secure. Please see below for the versions we currently support with security updates.
+We aim to keep `surreal-mem-mcp` up to date and secure. Please see below for the versions we currently support with security updates.
 
 | Version | Supported          |
 |---------|--------------------|
@@ -17,7 +17,7 @@ If you discover a security vulnerability, **please do not open an issue** on Git
 
 Instead, follow these steps:
 
-1. **Email the maintainer directly**
+1. **Email the maintainer directly** at `security@<your-github-org>.com`
 2. Include the following details:
    - Description of the vulnerability
    - Steps to reproduce (if possible)
@@ -56,7 +56,7 @@ While using this project, we recommend you:
 
 ## 🙏 Acknowledgments
 
-We value the contributions from the community and encourage responsible disclosure to help keep `CodeGraphContext` safe and secure for all users.
+We value the contributions from the community and encourage responsible disclosure to help keep `surreal-mem-mcp` safe and secure for all users.
 
 ---
 

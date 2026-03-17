@@ -1,481 +1,267 @@
-# 🏗️ CodeGraphContext (CGC)
+# Surreal-Mem-MCP
 
-**Turn code repositories into a queryable graph for AI agents.**
+A standalone Edge-RAG Memory Daemon utilizing HTTP/SSE MCP transport. The architecture consists of a high-performance Rust core (SurrealDB/RocksDB + Axum server) and a zero-config Python CLI Bootstrapper. It bypasses heavy LLM-as-a-Judge rerankers in favor of an ultra-fast sub-millisecond Bayesian Math Outer Query combining Cosine Similarity and BM25 Posterior scores.
 
-🌐 **Languages:**
-- 🇬🇧 [English](README.md)
-- 🇨🇳 [中文](README.zh-CN.md)
-- 🇰🇷 [한국어](README.kor.md)
-- 🇯🇵 日本語 (Soon)
-- 🇷🇺 Русский (Soon)
-- 🇪🇸 Español (Soon)
-
-🌍 **Help translate CodeGraphContext to your language by raising an issue & PR on https://github.com/Shashankss1205/CodeGraphContext/issues!**
-
-<p align="center">
-  <br>
-  <b>Bridge the gap between deep code graphs and AI context.</b>
-  <br><br>
-  <a href="https://pypi.org/project/codegraphcontext/">
-    <img src="https://img.shields.io/pypi/v/codegraphcontext?style=flat-square&logo=pypi" alt="PyPI Version">
-  </a>
-  <a href="https://pypi.org/project/codegraphcontext/">
-    <img src="https://img.shields.io/pypi/dm/codegraphcontext?style=flat-square" alt="PyPI Downloads">
-  </a>
-  <a href="LICENSE">
-    <img src="https://img.shields.io/github/license/CodeGraphContext/CodeGraphContext?style=flat-square" alt="License">
-  </a>
-  <img src="https://img.shields.io/badge/MCP-Compatible-green?style=flat-square" alt="MCP Compatible">
-  <a href="https://discord.gg/VCwUdCnn">
-    <img src="https://img.shields.io/discord/1421769154507309150?label=Discord&logo=discord&logoColor=white&style=flat-square">
-  </a>
-  <br><br>
-  <a href="https://github.com/CodeGraphContext/CodeGraphContext/stargazers">
-    <img src="https://img.shields.io/github/stars/CodeGraphContext/CodeGraphContext?style=flat-square&logo=github" alt="Stars">
-  </a>
-  <a href="https://github.com/CodeGraphContext/CodeGraphContext/network/members">
-    <img src="https://img.shields.io/github/forks/CodeGraphContext/CodeGraphContext?style=flat-square&logo=github" alt="Forks">
-  </a>
-  <a href="https://github.com/CodeGraphContext/CodeGraphContext/issues">
-    <img src="https://img.shields.io/github/issues-raw/CodeGraphContext/CodeGraphContext?style=flat-square&logo=github" alt="Issues">
-  </a>
-  <a href="https://github.com/CodeGraphContext/CodeGraphContext/pulls">
-    <img src="https://img.shields.io/github/issues-pr/CodeGraphContext/CodeGraphContext?style=flat-square&logo=github" alt="PRs">
-  </a>
-  <a href="https://github.com/CodeGraphContext/CodeGraphContext/graphs/contributors">
-    <img src="https://img.shields.io/github/contributors/CodeGraphContext/CodeGraphContext?style=flat-square&logo=github" alt="Contributors">
-  </a>
-<br><br>
-  <a href="https://github.com/CodeGraphContext/CodeGraphContext/actions/workflows/test.yml">
-    <img src="https://github.com/CodeGraphContext/CodeGraphContext/actions/workflows/test.yml/badge.svg" alt="Tests">
-  </a>
-  <a href="https://github.com/CodeGraphContext/CodeGraphContext/actions/workflows/e2e-tests.yml">
-    <img src="https://github.com/CodeGraphContext/CodeGraphContext/actions/workflows/e2e-tests.yml/badge.svg" alt="E2E Tests">
-  </a>
-  <a href="http://codegraphcontext.vercel.app/">
-    <img src="https://img.shields.io/badge/website-up-brightgreen?style=flat-square" alt="Website">
-  </a>
-  <a href="https://CodeGraphContext.github.io/CodeGraphContext/">
-    <img src="https://img.shields.io/badge/docs-GitHub%20Pages-blue?style=flat-square" alt="Docs">
-  </a>
-  <a href="https://youtu.be/KYYSdxhg1xU">
-    <img src="https://img.shields.io/badge/YouTube-Watch%20Demo-red?style=flat-square&logo=youtube" alt="YouTube Demo">
-  </a>
-</p>
-
-
-A powerful **MCP server** and **CLI toolkit** that indexes local code into a graph database to provide context to AI assistants and developers. Use it as a standalone CLI for comprehensive code analysis or connect it to your favorite AI IDE via MCP for AI-powered code understanding.
-
----
-
-## 📍 Quick Navigation
-* [🚀 Quick Start](#quick-start) 
-* [🌐 Supported Programming Languages](#supported-programming-languages) 
-* [🛠️ CLI Toolkit](#for-cli-toolkit-mode) 
-* [🤖 MCP Server](#-for-mcp-server-mode) 
-* [🗄️ Database Options](#database-options)
-
----
-
-## ✨ Experience CGC
-
-
-### 👨🏻‍💻 Installation and CLI
-> Install in seconds with pip and unlock a powerful CLI for code graph analysis.
-![Install and unlock the CLI instantly](https://github.com/CodeGraphContext/CodeGraphContext/blob/main/images/install&cli.gif)
-
-
-### 🛠️ Indexing in Seconds
-> The CLI intelligently parses your tree-sitter nodes to build the graph.
-![Indexing using an MCP client](https://github.com/CodeGraphContext/CodeGraphContext/blob/main/images/Indexing.gif)
-
-### 🤖 Powering your AI Assistant
-> Use natural language to query complex call-chains via MCP.
-![Using the MCP server](https://github.com/CodeGraphContext/CodeGraphContext/blob/main/images/Usecase.gif)
-
----
-
-## Project Details
-- **Version:** 0.3.1
-- **Authors:** Shashank Shekhar Singh <shashankshekharsingh1205@gmail.com>
-- **License:** MIT License (See [LICENSE](LICENSE) for details)
-- **Website:** [CodeGraphContext](http://codegraphcontext.vercel.app/)
-
----
-
-## 👨‍💻 Maintainer
-**CodeGraphContext** is created and actively maintained by:
-
-**Shashank Shekhar Singh**  
-- 📧 Email: [shashankshekharsingh1205@gmail.com](mailto:shashankshekharsingh1205@gmail.com)
-- 🐙 GitHub: [@Shashankss1205](https://github.com/Shashankss1205)
-- 🔗 LinkedIn: [Shashank Shekhar Singh](https://www.linkedin.com/in/shashank-shekhar-singh-a67282228/)
-- 🌐 Website: [codegraphcontext.vercel.app](http://codegraphcontext.vercel.app/)
-
-*Contributions and feedback are always welcome! Feel free to reach out for questions, suggestions, or collaboration opportunities.*
-
----
-
-## Star History
-[![Star History Chart](https://api.star-history.com/svg?repos=CodeGraphContext/CodeGraphContext&type=Date)](https://www.star-history.com/#CodeGraphContext/CodeGraphContext&Date)
-
----
+This Model Context Protocol (MCP) server allows your AI agents (Claude Desktop, Cursor, Gemini CLI, OpenCode, Code Puppy, etc.) to use a shared global memory system, complete with standardized behavioral rules (`SOUL.md` and `MEMORY.md`), independent of your current project directory.
 
 ## Features
--   **Code Indexing:** Analyzes code and builds a knowledge graph of its components.
--   **Relationship Analysis:** Query for callers, callees, class hierarchies, call chains and more.
--   **Pre-indexed Bundles:** Load famous repositories instantly with `.cgc` bundles - no indexing required! ([Learn more](docs/BUNDLES.md))
--   **Live File Watching:** Watch directories for changes and automatically update the graph in real-time (`cgc watch`).
--   **Interactive Setup:** A user-friendly command-line wizard for easy setup.
--   **Dual Mode:** Works as a standalone **CLI toolkit** for developers and as an **MCP server** for AI agents.
--   **Multi-Language Support:** Full support for 14 programming languages.
--   **Flexible Database Backend:** KùzuDB (default, zero-config for all platforms), FalkorDB Lite (Unix-only), FalkorDB Remote, or Neo4j (all platforms via Docker/native).
 
----
+- **Blazing Fast**: Uses Rust, Axum, and native Server-Sent Events (SSE) alongside embedded SurrealDB backed by RocksDB.
+- **BYOM (Bring Your Own Model)**: Compatible with local OpenAI-format embeddings (`Ollama`, `LM Studio`) natively.
+- **Bayesian Edge-RAG**: Blends `vector::similarity::cosine() * 0.7` and `BM25 * 0.3`, weighted by an epistemic prior (time decay, graph density, access counts). Let math do the parsing, not latency-heavy LLMs.
+- **Global Behavioral Rules**: Generates `~/.surreal-mem-mcp/rules/` accessible universally via `resources/list`. Memory rules dynamically persist across completely disparate agent ecosystems.
+- **Enterprise Semantic Redaction**: Intercepts and scrubs API keys (OpenAI, AWS, GCP, Anthropic, Stripe) and PII natively in Rust before they are written to the database, ensuring your local RocksDB volume is 100% leak-proof.
+- **Automated Bootstrapper**: Ships with a smart Python script that probes inference endpoints and injects system configs dynamically.
 
-## Supported Programming Languages
+> **💡 Curious about the technical tradeoffs?** Read **[ARCHITECTURE.md](./ARCHITECTURE.md)** to see how our Epistemic Math Queries drastically drop LLM token consumption, and why our embedded Graph Database outperforms traditional SQLite for dense code reasoning.
 
-CodeGraphContext provides comprehensive parsing and analysis for the following languages:
+## Installation & Setup
 
-| | Language | | Language | | Language |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| 🐍 | **Python** | 📜 | **JavaScript** | 🔷 | **TypeScript** |
-| ☕ | **Java** | 🏗️ | **C / C++** | #️⃣ | **C#** |
-| 🐹 | **Go** | 🦀 | **Rust** | 💎 | **Ruby** |
-| 🐘 | **PHP** | 🍎 | **Swift** | 🎨 | **Kotlin** |
-| 🎯 | **Dart** | 🐪 | **Perl** | | |
+We recommend using the included zero-dependency Python Bootstrapper script to configure the environment, download the correct binary for your OS, and automatically register it.
 
-Each language parser extracts functions, classes, methods, parameters, inheritance relationships, function calls, and imports to build a comprehensive code graph.
-
----
-
-## Database Options
-
-CodeGraphContext supports multiple graph database backends to suit your environment:
-
-| Feature | KùzuDB (Default) | FalkorDB Lite | Neo4j |
-| :--- | :--- | :--- | :--- |
-| **Setup** | Zero-config / Embedded | Zero-config / In-process | Docker / External |
-| **Platform** | **All (Windows Native, macOS, Linux)** | Unix-only (Linux/macOS/WSL) | All Platforms |
-| **Use Case** | Desktop, IDE, Local development | Specialized Unix development | Enterprise, Massive graphs |
-| **Requirement**| `pip install kuzu` | `pip install falkordblite` | Neo4j Server / Docker |
-| **Speed** | ⚡ Extremely Fast | ⚡ Fast | 🚀 Scalable |
-| **Persistence**| Yes (to disk) | Yes (to disk) | Yes (to disk) |
-
----
-
-## Used By
-
-CodeGraphContext is already being explored by developers and projects for:
-
-- **Static code analysis in AI assistants**
-- **Graph-based visualization of projects**
-- **Dead code and complexity detection**
-
-_If you’re using CodeGraphContext in your project, feel free to open a PR and add it here! 🚀_
-
----
-
-## Dependencies
-
-- `neo4j>=5.15.0`
-- `watchdog>=3.0.0`
-- `stdlibs>=2023.11.18`
-- `typer[all]>=0.9.0`
-- `rich>=13.7.0`
-- `inquirerpy>=0.3.4`
-- `python-dotenv>=1.0.0`
-- `tree-sitter>=0.21.0`
-- `tree-sitter-language-pack>=0.6.0`
-- `pyyaml`
-- `pytest`
-- `nbformat`
-- `nbconvert>=7.16.6`
-- `pathspec>=0.12.1`
-
-**Note:** Python 3.10-3.14 is supported.
-
----
-
-## Quick Start
-### Install the core toolkit
-```
-pip install codegraphcontext
-```
-
-### If 'cgc' command isn't found, run our one-line fix:
-```
-curl -sSL [https://raw.githubusercontent.com/CodeGraphContext/CodeGraphContext/main/scripts/post_install_fix.sh](https://raw.githubusercontent.com/CodeGraphContext/CodeGraphContext/main/scripts/post_install_fix.sh) | bash
-```
-
----
-
-## Getting Started
-
-### 📋 Understanding CodeGraphContext Modes
-CodeGraphContext operates in **two modes**, and you can use either or both:
-
-#### 🛠️ Mode 1: CLI Toolkit (Standalone)
-Use CodeGraphContext as a **powerful command-line toolkit** for code analysis:
-- Index and analyze codebases directly from your terminal
-- Query code relationships, find dead code, analyze complexity
-- Visualize code graphs and dependencies
-- Perfect for developers who want direct control via CLI commands
-
-#### 🤖 Mode 2: MCP Server (AI-Powered)
-Use CodeGraphContext as an **MCP server** for AI assistants:
-- Connect to AI IDEs (VS Code, Cursor, Windsurf, Claude, Kiro, etc.)
-- Let AI agents query your codebase using natural language
-- Automatic code understanding and relationship analysis
-- Perfect for AI-assisted development workflows
-
-**You can use both modes!** Install once, then use CLI commands directly OR connect to your AI assistant.
-
-### Installation (Both Modes)
-
-1.  **Install:** `pip install codegraphcontext`
-    <details>
-    <summary>⚙️ Troubleshooting: In case, command <code>cgc</code> not found</summary>
-
-    If you encounter <i>"cgc: command not found"</i> after installation, run the PATH fix script:
-    
-    **Linux/Mac:**
-    ```bash
-    # Download the fix script
-    curl -O https://raw.githubusercontent.com/CodeGraphContext/CodeGraphContext/main/scripts/post_install_fix.sh
-    
-    # Make it executable
-    chmod +x post_install_fix.sh
-    
-    # Run the script
-    ./post_install_fix.sh
-    
-    # Restart your terminal or reload shell config
-    source ~/.bashrc  # or ~/.zshrc for zsh users
-    ```
-    
-    **Windows (PowerShell):**
-    ```powershell
-    # Download the fix script
-    curl -O https://raw.githubusercontent.com/CodeGraphContext/CodeGraphContext/main/scripts/post_install_fix.sh
-    
-    # Run with bash (requires Git Bash or WSL)
-    bash post_install_fix.sh
-    
-    # Restart PowerShell or reload profile
-    . $PROFILE
-    ``` 
-    </details>
-
-2.  **Database Setup (Automatic)**
-    
-    - **KùzuDB (Default):** Runs natively on Windows, macOS, and Linux without any setup. Just `pip install kuzu` and you're ready!
-    - **FalkorDB Lite (Alternative):** Supported on Unix/macOS/WSL for Python 3.12+.
-    - **Neo4j (Alternative):** To use Neo4j instead, or if you prefer a server-based approach, run: `cgc neo4j setup`
-
----
-
-### For CLI Toolkit Mode
-
-**Start using immediately with CLI commands:**
-```bash
-# Index your current directory
-cgc index .
-
-# List all indexed repositories
-cgc list
-
-# Analyze who calls a function
-cgc analyze callers my_function
-
-# Find complex code
-cgc analyze complexity --threshold 10
-
-# Find dead code
-cgc analyze dead-code
-
-# Watch for live changes (optional)
-cgc watch .
-
-# See all commands
-cgc help
-```
-
-**See the full [CLI Commands Guide](CLI_Commands.md) for all available commands and usage scenarios.**
-
-### 🎨 Premium Interactive Visualization
-CodeGraphContext can generate stunning, interactive knowledge graphs of your code. Unlike static diagrams, these are premium web-based explorers:
-
-- **Premium Aesthetics**: Dark mode, glassmorphism, and modern typography (Outfit/JetBrains Mono).
-- **Interactive Inspection**: Click any node to open a detailed side panel with symbol information, file paths, and context.
-- **Quick Search**: Live-search through the graph to find specific symbols instantly.
-- **Intelligent Layouts**: Force-directed and hierarchical layouts that make complex relationships readable.
-- **Zero-Dependency Viewing**: Standalone HTML files that work in any modern browser.
+### Bootstrapper Method
 
 ```bash
-# Visualize function calls
-cgc analyze calls my_function --viz
-
-# Explore class hierarchies
-cgc analyze tree MyClass --viz
-
-# Visualize search results
-cgc find pattern "Auth" --viz
+curl -sSL https://raw.githubusercontent.com/OWNER/surreal-mem-mcp/main/cli/surreal-memory-init.py | python3
 ```
 
+**What this does:**
+1. Probes `localhost:11434` (Ollama) and `localhost:1234` (LM Studio) to find an active embedding model and generates `~/.surreal-mem-mcp/.env`.
+2. Recommends dropping `text-embedding-3-small` for `nomic-embed-text` based on your hardware.
+3. Downloads the `surreal-mem-mcp` compiled binary to `~/.surreal-mem-mcp/bin/`.
+4. Injects the binary into the Claude Desktop configuration (`claude_desktop_config.json`).
+5. Generates the default `SOUL.md` and `MEMORY.md` global context rules inside `~/.surreal-mem-mcp/rules/`.
 
----
+### Manual Usage
 
-### 🤖 For MCP Server Mode
+You can build the MCP server from source:
 
-**Configure your AI assistant to use CodeGraphContext:**
-1.  **Setup:** Run the MCP setup wizard to configure your IDE/AI assistant:
-    
-    ```bash
-    cgc mcp setup
-    ```
-    
-    The wizard can automatically detect and configure:
-    *   VS Code
-    *   Cursor
-    *   Windsurf
-    *   Claude
-    *   Gemini CLI
-    *   ChatGPT Codex
-    *   Cline
-    *   RooCode
-    *   Amazon Q Developer
-    *   Kiro
-
-    Upon successful configuration, `cgc mcp setup` will generate and place the necessary configuration files:
-    *   It creates an `mcp.json` file in your current directory for reference.
-    *   It stores your database credentials securely in `~/.codegraphcontext/.env`.
-    *   It updates the settings file of your chosen IDE/CLI (e.g., `.claude.json` or VS Code's `settings.json`).
-
-2.  **Start:** Launch the MCP server:    
-    ```bash
-    cgc mcp start
-    ```
-
-3.  **Use:** Now interact with your codebase through your AI assistant using natural language! See examples below.
-
----
-
-## Ignoring Files (`.cgcignore`)
-
-You can tell CodeGraphContext to ignore specific files and directories by creating a `.cgcignore` file in the root of your project. This file uses the same syntax as `.gitignore`.
-
-**Example `.cgcignore` file:**
-```
-# Ignore build artifacts
-/build/
-/dist/
-
-# Ignore dependencies
-/node_modules/
-/vendor/
-
-# Ignore logs
-*.log
+```bash
+cargo build --release
 ```
 
----
+Ensure your `~/.surreal-mem-mcp/.env` contains your setup:
 
-## MCP Client Configuration
+```env
+PORT=3000
+EMBEDDING_BASE_URL=http://localhost:11434/v1
+EMBEDDING_MODEL=nomic-embed-text
+SURREAL_DB_PATH=memory_store
+```
 
-The `cgc mcp setup` command attempts to automatically configure your IDE/CLI. If you choose not to use the automatic setup, or if your tool is not supported, you can configure it manually.
+Run the server:
 
-Add the following server configuration to your client's settings file (e.g., VS Code's `settings.json` or `.claude.json`):
+```bash
+./target/release/surreal-mem-mcp
+```
+
+The server will begin streaming SSE connections locally on port `3000`.
+
+## Data Storage & Database Location
+
+By default, the SurrealDB / RocksDB graph data volume is saved to your user's home directory across all operating systems.
+All memories, configuration files, and indexed AST data reside in:
+`~/.surreal-mem-mcp/`
+
+Specifically, your live RocksDB store is located within:
+`~/.surreal-mem-mcp/memory_store/`
+
+Because this is a global store, your AI agent will retain its memory context and AST indices regardless of the current IDE workspace you operate inside. If you ever need to completely purge your memory graph and start over, you can simply delete the `memory_store` directory and restart the daemon.
+
+## Visualizing Your Memory Graph
+
+**[Surrealist](https://surrealdb.com/surrealist)** is the official SurrealDB GUI and the recommended way to explore and visualize your agent's memory graph and AST code indices.
+
+### Setup
+1. Download [Surrealist](https://surrealdb.com/surrealist) for your OS.
+2. Create a new connection with the following settings:
+   - **Connection type:** `Local / Embedded RocksDB`
+   - **Database path:** `~/.surreal-mem-mcp/memory_store`
+3. Open the **Explorer** or **Query** tabs to interactively inspect your data.
+
+### Useful Queries
+
+Browse all stored memories:
+```sql
+SELECT id, text, scope, created_at, access_count FROM memory ORDER BY access_count DESC;
+```
+
+Visualize the knowledge graph connections:
+```sql
+SELECT id, text, ->related_to->memory.text AS connections FROM memory LIMIT 20;
+```
+
+Browse your indexed AST code graph (files, functions, classes):
+```sql
+SELECT * FROM file;
+SELECT * FROM func;
+SELECT * FROM class;
+```
+
+Explore function call relationships:
+```sql
+SELECT name, ->calls->func.name AS calls_functions FROM func LIMIT 50;
+```
+
+> 💡 **Tip:** Surrealist's **Graph View** tab will render your `->related_to->` and `->calls->` relationship edges as an interactive visual graph — no extra tooling required.
+
+## MCP Capabilities
+
+### Tools
+
+- `remember`: Store a memory with its embeddings in the Bayesian Graph memory store. Requires a `scope` (global, agent, session) and optional `agent_id` and `session_id`.
+- `search_memory`: Search the memory store using Bayesian Fusion (70% Vector + 30% BM25) and Epistemic Uncertainty checks. Enforces strict scope boundaries.
+- `search_memory_graph`: Perform a deep 5-hop knowledge graph traversal starting from the most relevant memory match, avoiding latency-heavy repeated SQL execution.
+- `promote_memory`: Graduate a highly valuable `session` or `agent` memory to the `global` scope while preserving its graph edges and access frequency multipliers.
+- `update_behavioral_rules`: Append or rewrite the learned user preferences in the dynamic `MEMORY.md` file.
+- `end_session`: Instantly garbage collect and prune ephemeral `session` scoped memories from the RocksDB instance to prevent context bloat.
+
+### How Scoping Works (Orchestrator Integration)
+The human user **never** calls these parameters manually. The AI model autonomously invokes the tools via MCP. For the scoping logic to function perfectly, your Orchestrator (e.g., OpenCode, Gemini CLI, Code Puppy, custom LangChain pipelines) must inform the LLM of its current context:
+1. **Prompt Injection:** Inject the current identifiers into the agent's system prompt *(e.g. "Your agent_id is 'tech_writer', your session_id is '9b1deb4d...'. Pass these to memory tools.")*
+2. **Middleware Interception:** Alternatively, the orchestrator can intercept the LLM's tool execution payload and forcefully inject/override the `agent_id` and `session_id` before transmitting it to the Surreal-Mem-MCP daemon.
+
+> **Building with LangChain, Openclaw, Nemoclaw, CrewAI, or LlamaIndex?** 
+> See our explicit **[Multi-Agent Framework Integration Guide (FRAMEWORKS.md)](./FRAMEWORKS.md)** to see how to mount these memory tools into code-based orchestration frameworks.
+
+### Resources
+
+- `memory://rules/soul`: Exposes the immutable Core Identity rules guiding the AI agent.
+- `memory://rules/learned`: Exposes dynamic Working Memory preferences the AI observes from interactions.
+
+## Benchmarks & Tradeoffs
+Traditional autonomous agent platforms inherently rely on SQLite. By embedding **SurrealDB** mapped down to **RocksDB** underneath an Axum SSE server, we benchmarked the following capabilities:
+
+- **Deep Traversal (5 Hops):** `~67.88µs` resolving deeply connected concepts autonomously. SQLite lacks naive wide-graph recursive structures and would drop to `N+1` loops to achieve the same result.
+- **Data Density:** RocksDB actively packs its memory trees ~18% more byte-efficiently than SQLite B-Trees.
+- **RAM Compute Tradeoff:** Surreal-Mem-MCP averages a larger footprint (`~155.2 MB`) vs generic embeddings (`~58.0 MB`). Native Math computations are significantly faster but hold slightly higher RAM margins. 
+
+To bootstrap the environment automatically across macOS, Linux, or Windows (WSL), simply execute the python configuration daemon. This script interacts directly with the user to select their desired Embedding Model endpoint (local Ollama, OpenAI, or custom).
+
+It will then:
+1. Compile or download the correct `surreal-mem-mcp` binary architecture.
+2. Formally register the daemon into the settings files of detected clients (`Code Puppy`, `Google Antigravity`, `Gemini CLI`, `Claude Desktop`).
+3. **Automatically inject structural system guidelines** (via `.cursorrules`, `claude_desktop_config.json`, and `memory.md`) to instruct the LLM to *proactively* use the `remember` tool without requiring manual user prompts.
+
+```bash
+python3 cli/surreal-memory-init.py
+```
+
+### Uninstallation
+If you wish to remove the MCP auto-indexing rules and deregister the server from your IDE configurations, you can run the bootstrapper with the `--uninstall` flag. 
+*Note: This will not delete your actual database volume in `~/.surreal-mem-mcp/`, preserving your memories if you choose to reinstall.*
+
+```bash
+python3 cli/surreal-memory-init.py --uninstall
+```
+
+## Client Integration
+
+### Openclaw, Nemoclaw & Code Puppy Integration
+If you are operating within **Openclaw**, **Nemoclaw**, or using the **Code Puppy** IDE, `surreal-mem-mcp` is deeply supported. Most other agent harnesses based on the Openclaw architecture should work out of the box as well!
+- **Code Puppy:** The Python bootstrapper automatically injects the MCP toolset into `~/.code_puppy/mcp_servers.json`.
+- **Openclaw / Nemoclaw:** These frameworks natively integrate with SurrealDB via its internal engine API (REST/WS) rather than relying on standard MCP wrappers. Therefore, no local configuration injection is required for Openclaw orchestrators.
+
+### Gemini CLI, OpenCode, Code Puppy, etc.
+Here are specific setup instructions for integrating the Memory Daemon into various CLI coding agents. Once configured, each agent will instantly have access to the `remember`, `search_memory`, and `update_behavioral_rules` tools, as well as the global rules resources.
+
+### 1. Code-Puppy
+
+Add the following configuration to `~/.config/code_puppy/mcp_servers.json`:
 
 ```json
 {
-  "mcpServers": {
-    "CodeGraphContext": {
-      "command": "cgc",
-      "args": [
-        "mcp",
-        "start"
-      ],
-      "env": {
-        "NEO4J_URI": "YOUR_NEO4J_URI",
-        "NEO4J_USERNAME": "YOUR_NEO4J_USERNAME",
-        "NEO4J_PASSWORD": "YOUR_NEO4J_PASSWORD"
-      },
-      "disabled": false,
-      "alwaysAllow": []
+  "mcp_servers": {
+    "surreal-mem-mcp": {
+      "type": "sse",
+      "url": "http://127.0.0.1:3000/sse"
     }
   }
 }
 ```
 
----
+### 2. OpenCode
 
-## Natural Language Interaction Examples
+OpenCode defines its MCP servers within a global `~/.config/opencode/opencode.json` or project-local `./opencode.json` file. Note that it expects `command` to be an array and requires `type: "local"`:
 
-Once the server is running, you can interact with it through your AI assistant using plain English. Here are some examples of what you can say:
+```json
+{
+  "mcp": {
+    "surreal-mem-mcp": {
+      "type": "sse",
+      "url": "http://127.0.0.1:3000/sse"
+    }
+  }
+}
+```
 
-### Indexing and Watching Files
+### 3. Gemini CLI
 
--   **To index a new project:**
-    -   "Please index the code in the `/path/to/my-project` directory."
-    OR
-    -   "Add the project at `~/dev/my-other-project` to the code graph."
+In your Gemini playbook (`GEMINI.md` / `settings.json`), use the standard MCP schema:
 
+```json
+{
+  "mcpServers": {
+    "surreal-mem-mcp": {
+      "type": "sse",
+      "url": "http://127.0.0.1:3000/sse"
+    }
+  }
+}
+```
 
--   **To start watching a directory for live changes:**
-    -   "Watch the `/path/to/my-active-project` directory for changes."
-    OR
-    -   "Keep the code graph updated for the project I'm working on at `~/dev/main-app`."
+### 4. Claude Code
 
-    When you ask to watch a directory, the system performs two actions at once:
-    1.  It kicks off a full scan to index all the code in that directory. This process runs in the background, and you'll receive a `job_id` to track its progress.
-    2.  It begins watching the directory for any file changes to keep the graph updated in real-time.
+For Anthropic's Claude Code CLI, the easiest configuration method is via the CLI itself. Run this command in your terminal to globally map the daemon:
 
-    This means you can start by simply telling the system to watch a directory, and it will handle both the initial indexing and the continuous updates automatically.
+```bash
+claude mcp add surreal-mem-mcp http://127.0.0.1:3000/sse
+```
 
-### Querying and Understanding Code
+Alternatively, for project-specific mapping, add it manually to your project's `.claude/mcp.json` or global `~/.claude/settings.json`:
 
--   **Finding where code is defined:**
-    -   "Where is the `process_payment` function?"
-    -   "Find the `User` class for me."
-    -   "Show me any code related to 'database connection'."
+```json
+{
+  "mcpServers": {
+    "surreal-mem-mcp": {
+      "type": "sse",
+      "url": "http://127.0.0.1:3000/sse"
+    }
+  }
+}
+}
+```
 
--   **Analyzing relationships and impact:**
-    -   "What other functions call the `get_user_by_id` function?"
-    -   "If I change the `calculate_tax` function, what other parts of the code will be affected?"
-    -   "Show me the inheritance hierarchy for the `BaseController` class."
-    -   "What methods does the `Order` class have?"
+### 5. Google Antigravity
 
--   **Exploring dependencies:**
-    -   "Which files import the `requests` library?"
-    -   "Find all implementations of the `render` method."
+For Google's agent-first IDE, integration requires editing the application's native configuration map.
 
--   **Advanced Call Chain and Dependency Tracking (Spanning Hundreds of Files):**
-    The CodeGraphContext excels at tracing complex execution flows and dependencies across vast codebases. Leveraging the power of graph databases, it can identify direct and indirect callers and callees, even when a function is called through multiple layers of abstraction or across numerous files. This is invaluable for:
-    -   **Impact Analysis:** Understand the full ripple effect of a change to a core function.
-    -   **Debugging:** Trace the path of execution from an entry point to a specific bug.
-    -   **Code Comprehension:** Grasp how different parts of a large system interact.
+1. Open the MCP store via the **"..."** dropdown at the top of the editor's agent panel.
+2. Click on **"Manage MCP Servers"**.
+3. Click on **"View raw config"**.
+4. Modify the `mcp_config.json` (which saves to `~/.gemini/antigravity/mcp_config.json`) with the daemon's SSE mapping:
 
-    -   "Show me the full call chain from the `main` function to `process_data`."
-    -   "Find all functions that directly or indirectly call `validate_input`."
-    -   "What are all the functions that `initialize_system` eventually calls?"
-    -   "Trace the dependencies of the `DatabaseManager` module."
+```json
+{
+  "mcpServers": {
+    "surreal-mem-mcp": {
+      "type": "sse",
+      "url": "http://127.0.0.1:3000/sse"
+    }
+  }
+}
+```
 
--   **Code Quality and Maintenance:**
-    -   "Is there any dead or unused code in this project?"
-    -   "Calculate the cyclomatic complexity of the `process_data` function in `src/utils.py`."
-    -   "Find the 5 most complex functions in the codebase."
+## Acknowledgments
 
--   **Repository Management:**
-    -   "List all currently indexed repositories."
-    -   "Delete the indexed repository at `/path/to/old-project`."
+This project stands on the shoulders of incredible open-source infrastructure. We explicitly want to thank and credit:
 
----
+- **[SurrealDB](https://surrealdb.com/)**: For providing the blazing-fast, multi-model graph database engine that makes our 5-hop Edge-RAG traversals possible.
+- **[RocksDB](https://rocksdb.org/)**: The embeddable persistent key-value store developed by Meta, heavily powering the core SurrealDB runtime.
+- **[CodeGraphContext (CGC)](https://github.com/DevonSystems/CodeGraphContext)**: The original Python/Neo4j implementation that inspired our transition to a lightweight, embedded Rust agentic graph daemon. 
 
-## Contributing
-
-Contributions are welcome! 🎉  
-Please see our [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-If you have ideas for new features, integrations, or improvements, open an [issue](https://github.com/CodeGraphContext/CodeGraphContext/issues) or submit a Pull Request.
-
-Join discussions and help shape the future of CodeGraphContext.
+## OS Support Map
+Binaries are automatically built for the following architectures:
+- macOS (Apple Silicon: `aarch64` / Intel: `x86_64`)
+- Linux (`aarch64` / `x86_64`)
+- Windows (`aarch64` / `x86_64`)
