@@ -57,9 +57,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           generate_release_notes: true
-          files: |
-            surreal-mem-mcp-*/surreal-mem-mcp*
+          files: artifacts/*/*
