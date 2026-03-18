@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 surrealdb = { version = "1.0.0", features = ["kv-rocksdb", "kv-mem"] }
-reqwest = { version = "0.12", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 uuid = { version = "1.6", features = ["v4"] }
@@ -34,3 +33,4 @@ tree-sitter-c-sharp = "0.20.0"
 tree-sitter-cpp = "0.20.0"
 regex = "1.12.3"
 lazy_static = "1.5.0"
+fastembed = "5.13.0"

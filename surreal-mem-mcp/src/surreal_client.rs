@@ -4,9 +4,11 @@ use std::sync::Arc;
 use surrealdb::Surreal;
 use surrealdb::engine::local::{Db, RocksDb};
 use uuid::Uuid;
+use crate::embeddings::local::LocalEmbedder;
 
 pub struct SurrealClient {
     db: Arc<Surreal<Db>>,
+    embedder: Arc<LocalEmbedder>,
 }
 
 impl SurrealClient {
@@ -33,7 +35,58 @@ impl SurrealClient {
         .await?
         .check()?;
 
-        Ok(Self { db: Arc::new(db) })
+        let embedder = Arc::new(LocalEmbedder::new()?);
+        let client = Self {
+            db: Arc::new(db),
+            embedder,
+        };
+        
+        client.migrate_embeddings().await?;
+        
+        Ok(client)
+    }
+
+    pub fn get_embedding(&self, text: &str) -> Option<Vec<f32>> {
+        self.embedder.get_embedding(text)
+    }
+
+    async fn migrate_embeddings(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut res = self.db.query(
+            "SELECT id, text, headline FROM memory WHERE type::number(array::len(embedding)) != 768 AND type::number(array::len(embedding)) > 0"
+        ).await?;
+        
+        let rows: Vec<Value> = res.take(0).unwrap_or_default();
+        if !rows.is_empty() {
+            println!("Migrating {} memories to JinaEmbeddingsV2 768-d format...", rows.len());
+            for row in rows {
+                if let Some(id) = row.get("id") {
+                    let text = row.get("text").and_then(|t| t.as_str()).unwrap_or("");
+                    let new_text_emb = self.get_embedding(text);
+                    
+                    let new_headline_emb = if let Some(headline) = row.get("headline").and_then(|h| h.as_str()) {
+                        self.get_embedding(headline)
+                    } else {
+                        None
+                    };
+                    
+                    if let Some(emb) = new_text_emb {
+                        let mut update_data = json!({
+                            "embedding": emb
+                        });
+                        if let Some(hemb) = new_headline_emb {
+                            update_data["headline_embedding"] = json!(hemb);
+                        }
+                        
+                        let _ = self.db.query("UPDATE $id MERGE $data")
+                            .bind(("id", id.clone()))
+                            .bind(("data", update_data))
+                            .await?;
+                    }
+                }
+            }
+            println!("Migration complete.");
+        }
+        Ok(())
     }
 
     pub async fn remember(

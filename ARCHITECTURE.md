@@ -10,7 +10,7 @@ Here is a deep dive into the engineering decisions governing the system.
 A massive problem in the current RAG ecosystem is the over-reliance on "LLM-as-a-Judge" rerankers. Sending 50 initial vector search results to an LLM to determine the "top 5" consumes excessive input tokens and introduces massive latency overhead.
 
 `surreal-mem-mcp` bypasses LLMs entirely during the retrieval phase via a **Bayesian Math Outer Query**:
-- **70% Weight:** `vector::similarity::cosine()` (Semantic meaning via Nomic embeddings)
+- **70% Weight:** `vector::similarity::cosine()` (Semantic meaning via Jina ONNX embeddings)
 - **30% Weight:** Full-Text Search BM25 (Exact keyword matching)
 - **Epistemic Multipliers:** The raw score is multiplied against the node's `access_count` (how useful it has been historically) and a Time Decay logarithm (to prioritize newer context natively).
 

@@ -1,4 +1,3 @@
-use crate::embeddings::openai::OpenAiClient;
 use crate::surreal_client::SurrealClient;
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -117,7 +116,6 @@ pub fn list_tools() -> Vec<Value> {
 pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
     let name = params.get("name").and_then(|n| n.as_str()).unwrap_or("");
     let args = params.get("arguments").cloned().unwrap_or(json!({}));
-    let openai_client = OpenAiClient::new();
 
     match name {
         "remember" => {
@@ -138,14 +136,16 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
             let safe_headline_ref = safe_headline.as_deref();
 
             // Embed the full text for precise vector search
-            let emb = openai_client.get_embedding(&safe_text).await.ok();
+            let emb = db.get_embedding(&safe_text);
 
             // Embed the headline separately so compressed searches can still
             // use vector similarity against the summary representation.
             let headline_emb = if let Some(hl) = safe_headline_ref {
-                if !hl.is_empty() {
-                    openai_client.get_embedding(hl).await.ok()
-                } else { None }
+                if hl.len() > 10 {
+                    db.get_embedding(hl)
+                } else {
+                    None
+                }
             } else { None };
 
             match db
@@ -192,7 +192,7 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
             let limit = args.get("limit").and_then(|l| l.as_u64()).unwrap_or(5) as usize;
             let compressed = args.get("compressed").and_then(|c| c.as_bool()).unwrap_or(false);
 
-            let emb = openai_client.get_embedding(query).await.ok();
+            let emb = db.get_embedding(query);
 
             match db
                 .bayesian_search(query, emb, limit, scope, agent_id, session_id, compressed)
@@ -223,7 +223,7 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
             let session_id = args.get("session_id").and_then(|s| s.as_str());
             let max_depth = args.get("max_depth").and_then(|d| d.as_u64()).unwrap_or(5) as usize;
 
-            let emb = openai_client.get_embedding(query).await.ok();
+            let emb = db.get_embedding(query);
 
             match db
                 .bayesian_graph_search(query, emb, max_depth, scope, agent_id, session_id)

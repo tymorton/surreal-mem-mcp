@@ -7,46 +7,22 @@ This Model Context Protocol (MCP) server allows your AI agents (Claude Desktop, 
 ## Features
 
 - **Blazing Fast**: Uses Rust, Axum, and native Server-Sent Events (SSE) alongside embedded SurrealDB backed by RocksDB.
-- **BYOM (Bring Your Own Model)**: Compatible with local OpenAI-format embeddings (`Ollama`, `LM Studio`) natively.
+- **Embedded ONNX Models**: Runs sovereign `JinaEmbeddingsV2BaseEN` natively in-process out of the box. Zero python required, zero Ollama required, zero external dependencies.
 - **Bayesian Edge-RAG**: Blends `vector::similarity::cosine() * 0.7` and `BM25 * 0.3`, weighted by an epistemic prior (time decay, graph density, access counts). Let math do the parsing, not latency-heavy LLMs.
 - **Global Behavioral Rules**: Generates `~/.surreal-mem-mcp/rules/` accessible universally via `resources/list`. Memory rules dynamically persist across completely disparate agent ecosystems.
 - **Enterprise Semantic Redaction**: Intercepts and scrubs API keys (OpenAI, AWS, GCP, Anthropic, Stripe) and PII natively in Rust before they are written to the database, ensuring your local RocksDB volume is 100% leak-proof.
-- **Automated Bootstrapper**: Ships with a smart Python script that probes inference endpoints and injects system configs dynamically.
 
 > **💡 Curious about the technical tradeoffs?** Read **[ARCHITECTURE.md](./ARCHITECTURE.md)** to see how our Epistemic Math Queries drastically drop LLM token consumption, and why our embedded Graph Database outperforms traditional SQLite for dense code reasoning.
 
 ## Installation & Setup
 
-We recommend using the included zero-dependency Python Bootstrapper script to configure the environment, download the correct binary for your OS, and automatically register it.
+Since the daemon bundles the fastembed-rs ONNX runtime, it requires zero external dependencies and zero configuration.
 
-### Bootstrapper Method
-
-```bash
-curl -sSL https://raw.githubusercontent.com/OWNER/surreal-mem-mcp/main/cli/surreal-memory-init.py | python3
-```
-
-**What this does:**
-1. Probes `localhost:11434` (Ollama) and `localhost:1234` (LM Studio) to find an active embedding model and generates `~/.surreal-mem-mcp/.env`.
-2. Recommends dropping `text-embedding-3-small` for `nomic-embed-text` based on your hardware.
-3. Downloads the `surreal-mem-mcp` compiled binary to `~/.surreal-mem-mcp/bin/`.
-4. Injects the binary into the Claude Desktop configuration (`claude_desktop_config.json`).
-5. Generates the default `SOUL.md` and `MEMORY.md` global context rules inside `~/.surreal-mem-mcp/rules/`.
-
-### Manual Usage
-
+### Manual Setup
 You can build the MCP server from source:
 
 ```bash
 cargo build --release
-```
-
-Ensure your `~/.surreal-mem-mcp/.env` contains your setup:
-
-```env
-PORT=3000
-EMBEDDING_BASE_URL=http://localhost:11434/v1
-EMBEDDING_MODEL=nomic-embed-text
-SURREAL_DB_PATH=memory_store
 ```
 
 Run the server:
@@ -55,7 +31,7 @@ Run the server:
 ./target/release/surreal-mem-mcp
 ```
 
-The server will begin streaming SSE connections locally on port `3000`.
+The server will begin streaming SSE connections locally on port `3000`. By default, the embedded 8k-context Jina ONNX model weights (`~150MB`) will be automatically downloaded and cached locally on first boot.
 
 ## Data Storage & Database Location
 
@@ -134,26 +110,7 @@ Traditional autonomous agent platforms inherently rely on SQLite. By embedding *
 
 - **Deep Traversal (5 Hops):** `~67.88µs` resolving deeply connected concepts autonomously. SQLite lacks naive wide-graph recursive structures and would drop to `N+1` loops to achieve the same result.
 - **Data Density:** RocksDB actively packs its memory trees ~18% more byte-efficiently than SQLite B-Trees.
-- **RAM Compute Tradeoff:** Surreal-Mem-MCP averages a larger footprint (`~155.2 MB`) vs generic embeddings (`~58.0 MB`). Native Math computations are significantly faster but hold slightly higher RAM margins. 
-
-To bootstrap the environment automatically across macOS, Linux, or Windows (WSL), simply execute the python configuration daemon. This script interacts directly with the user to select their desired Embedding Model endpoint (local Ollama, OpenAI, or custom).
-
-It will then:
-1. Compile or download the correct `surreal-mem-mcp` binary architecture.
-2. Formally register the daemon into the settings files of detected clients (`Code Puppy`, `Google Antigravity`, `Gemini CLI`, `Claude Desktop`).
-3. **Automatically inject structural system guidelines** (via `.cursorrules`, `claude_desktop_config.json`, and `memory.md`) to instruct the LLM to *proactively* use the `remember` tool without requiring manual user prompts.
-
-```bash
-python3 cli/surreal-memory-init.py
-```
-
-### Uninstallation
-If you wish to remove the MCP auto-indexing rules and deregister the server from your IDE configurations, you can run the bootstrapper with the `--uninstall` flag. 
-*Note: This will not delete your actual database volume in `~/.surreal-mem-mcp/`, preserving your memories if you choose to reinstall.*
-
-```bash
-python3 cli/surreal-memory-init.py --uninstall
-```
+- **RAM Compute Tradeoff:** Surreal-Mem-MCP averages a larger footprint (`~250.2 MB`) vs generic memory handlers out of process (`~58.0 MB`). This is because the server completely bundles the heavily optimized Jina ONNX model directly in process space, granting zero-latency vectorization without HTTP transport overhead.
 
 ## Client Integration
 
