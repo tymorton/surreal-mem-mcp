@@ -1,11 +1,12 @@
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    extract::{Path, Query, State},
+    http::HeaderMap,
     response::{
         IntoResponse,
         sse::{Event, Sse},
     },
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use futures::stream::Stream;
 use serde::Deserialize;
@@ -39,9 +40,43 @@ pub fn create_router(db: Arc<SurrealClient>) -> Router {
     };
 
     Router::new()
+        .route("/", get(info_handler))
         .route("/sse", get(sse_handler))
         .route("/message", post(message_handler))
+        .route("/session/:session_id", delete(session_terminate_handler))
         .with_state(state)
+}
+
+/// GET / — Transport info endpoint.
+/// Openclaw connectors that accidentally try STDIO will hit this and get a
+/// clear human-readable payload instead of a silent dead connection.
+async fn info_handler() -> impl IntoResponse {
+    Json(json!({
+        "server": "surreal-mem-mcp",
+        "transport": "sse",
+        "sse_endpoint": "/sse",
+        "message_endpoint": "/message?session_id={session_id}",
+        "note": "STDIO transport is not supported. Connect via HTTP/SSE."
+    }))
+}
+
+/// DELETE /session/:session_id — Orchestrator-side session lifecycle hook.
+/// Openclaw task managers call this when a task completes so ephemeral session
+/// memories are eagerly pruned without requiring the LLM to call `end_session`.
+async fn session_terminate_handler(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> impl IntoResponse {
+    match state.db.end_session(&session_id).await {
+        Ok(_) => (
+            axum::http::StatusCode::OK,
+            Json(json!({ "deleted": true, "session_id": session_id })),
+        ),
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string() })),
+        ),
+    }
 }
 
 async fn sse_handler(
@@ -67,8 +102,20 @@ async fn sse_handler(
 async fn message_handler(
     State(state): State<AppState>,
     Query(query): Query<SessionQuery>,
+    headers: HeaderMap,
     Json(payload): Json<JsonRpcRequest>,
 ) -> impl IntoResponse {
+    // Extract Openclaw (or any orchestrator) middleware headers.
+    // These are used as fallbacks when tool call args don't include agent_id / session_id.
+    // Explicit args in the JSON body always win over header values.
+    let header_agent_id = headers
+        .get("x-agent-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let header_session_id = headers
+        .get("x-session-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
     let session_id = query.session_id.clone();
 
     tokio::spawn(async move {
@@ -102,8 +149,28 @@ async fn message_handler(
                 error: None,
             },
             "tools/call" => {
-                let result =
-                    tools::call_tool(payload.params.unwrap_or(json!({})), state.db.clone()).await;
+                let mut params = payload.params.unwrap_or(json!({}));
+                // Gap 2: Header-based agent_id / session_id injection.
+                // Only fills in values that are absent from the tool args — explicit args always win.
+                if let Some(args) = params.get_mut("arguments") {
+                    if args.get("agent_id").is_none() || args["agent_id"].is_null() {
+                        if let Some(ref aid) = header_agent_id {
+                            args["agent_id"] = json!(aid);
+                        }
+                    }
+                    if args.get("session_id").is_none() || args["session_id"].is_null() {
+                        if let Some(ref sid) = header_session_id {
+                            args["session_id"] = json!(sid);
+                        }
+                    }
+                    // Also propagate header agent_id as author_agent_id if absent
+                    if args.get("author_agent_id").is_none() || args["author_agent_id"].is_null() {
+                        if let Some(ref aid) = header_agent_id {
+                            args["author_agent_id"] = json!(aid);
+                        }
+                    }
+                }
+                let result = tools::call_tool(params, state.db.clone()).await;
                 JsonRpcResponse {
                     jsonrpc: "2.0".to_string(),
                     id: payload.id.clone(),

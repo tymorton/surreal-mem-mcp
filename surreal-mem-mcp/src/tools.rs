@@ -16,6 +16,8 @@ pub fn list_tools() -> Vec<Value> {
                     "scope": { "type": "string", "enum": ["global", "agent", "session"], "description": "The scope of this memory." },
                     "agent_id": { "type": "string", "description": "The ID of the agent (if applicable)." },
                     "session_id": { "type": "string", "description": "The ID of the current session (if applicable)." },
+                    "author_agent_id": { "type": "string", "description": "The specific sub-agent that authored this memory. Injected automatically from X-Agent-Id header if omitted. Used for swarm debugging and write attribution." },
+                    "ttl_days": { "type": "integer", "description": "Optional TTL in days. After this many days the memory is passively evicted. If omitted, the memory never expires (unless it is session-scoped, which always expires after 24h)." },
                     "metadata": { "type": "object" }
                 },
                 "required": ["text", "scope"]
@@ -98,6 +100,17 @@ pub fn list_tools() -> Vec<Value> {
                 "required": ["memory_id", "target_scope"]
             }
         }),
+        json!({
+            "name": "check_index_status",
+            "description": "Check whether a local codebase path has already been indexed. Call this before `index_codebase` to prevent duplicate concurrent indexing runs in a multi-agent swarm. Returns { indexed, file_count, func_count, last_indexed_at }.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "The absolute path to check index status for." }
+                },
+                "required": ["path"]
+            }
+        }),
     ]
 }
 
@@ -116,6 +129,8 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
                 .unwrap_or("global");
             let agent_id = args.get("agent_id").and_then(|a| a.as_str());
             let session_id = args.get("session_id").and_then(|s| s.as_str());
+            let author_agent_id = args.get("author_agent_id").and_then(|a| a.as_str());
+            let ttl_days = args.get("ttl_days").and_then(|t| t.as_u64()).map(|v| v as u32);
             let metadata = args.get("metadata").cloned().unwrap_or(json!({}));
 
             let safe_text = crate::security::redactor::redact_sensitive_data(text);
@@ -134,7 +149,7 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
             } else { None };
 
             match db
-                .remember(&safe_text, safe_headline_ref, emb, headline_emb, metadata, scope, agent_id, session_id)
+                .remember(&safe_text, safe_headline_ref, emb, headline_emb, metadata, scope, agent_id, session_id, author_agent_id, ttl_days)
                 .await
             {
                 Ok(id) => json!({
@@ -317,6 +332,53 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
                     "content": [
                         { "type": "text", "text": format!("Error updating memory: {}", e) }
                     ]
+                }),
+            }
+        }
+        "check_index_status" => {
+            let path = args.get("path").and_then(|p| p.as_str()).unwrap_or("");
+            match db.db()
+                .query("SELECT count() AS file_count, math::max(indexed_at) AS last_indexed_at FROM file WHERE path CONTAINS $path_prefix GROUP BY all")
+                .bind(("path_prefix", path))
+                .await
+            {
+                Ok(mut res) => {
+                    let rows: Vec<Value> = res.take(0).unwrap_or_default();
+                    let (file_count, last_indexed_at) = if let Some(row) = rows.first() {
+                        (
+                            row.get("file_count").and_then(|v| v.as_u64()).unwrap_or(0),
+                            row.get("last_indexed_at").cloned().unwrap_or(json!(null)),
+                        )
+                    } else {
+                        (0, json!(null))
+                    };
+
+                    let mut func_res = db.db()
+                        .query("SELECT count() AS func_count FROM func WHERE path CONTAINS $path_prefix GROUP BY all")
+                        .bind(("path_prefix", path))
+                        .await
+                        .unwrap_or_else(|_| panic!());
+                    let func_rows: Vec<Value> = func_res.take(0).unwrap_or_default();
+                    let func_count = func_rows.first()
+                        .and_then(|r| r.get("func_count"))
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0);
+
+                    json!({
+                        "content": [{
+                            "type": "text",
+                            "text": serde_json::to_string_pretty(&json!({
+                                "indexed": file_count > 0,
+                                "file_count": file_count,
+                                "func_count": func_count,
+                                "last_indexed_at": last_indexed_at
+                            })).unwrap_or_default()
+                        }]
+                    })
+                }
+                Err(e) => json!({
+                    "isError": true,
+                    "content": [{ "type": "text", "text": format!("Error checking index status: {}", e) }]
                 }),
             }
         }

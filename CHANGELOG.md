@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+### Added
+- **Openclaw Interceptor Middleware**: Added `X-Agent-Id` and `X-Session-Id` header interpolation to the Axum SSE `message_handler`. If tool calls omit scoping identifiers, the server gracefully falls back to headers, enabling zero-shot LLM memory isolation.
+- **REST Lifecycle Hooks**: Added `DELETE /session/:session_id` endpoint. Orchestrators (like Openclaw or Nemoclaw Hands) can eagerly prune ephemeral context upon task completion without requiring the LLM to call `end_session`.
+- **Pre-flight Concurrency Check**: Added `check_index_status` MCP tool returning `{ indexed, file_count, func_count, last_indexed_at }`. Agents in high-throughput swarms should call this before indexing a repository to prevent duplicate CPU work.
+- **Write Attribution Tracking**: Added `author_agent_id` to the `remember` schema. Memories now explicitly track which sub-agent in a swarm originally authored them, improving multi-agent graph debugging.
+- **Global Memory Passive TTL**: Added `ttl_days` to the `remember` schema. Global and Agent scoped memories can now opt-in to a passive eviction lifecycle (computed as `expires_at`).
+
+### Fixed
+- **AST Relational Edge Duplication**: Fixed a swarm concurrency bug where multiple agents indexing the same codebase simultaneously would duplicate `->contains->`, `->calls->`, and `->imports->` graph edges. Refactored the tree-sitter generation loop to use deterministic idempotent Record IDs (`UPDATE contains:⟨filehash_funchash⟩`) instead of `RELATE`.
+- **SSE Transport Diagnostic**: Fixed silent connection hangs for frameworks expecting standard STDIO transport. `GET /` now returns an HTTP 200 health payload explicitly stating `transport: sse` and the exact connection URIs.
+
+---
+
 ## [0.1.0] - 2026-03-17
 
 ### Added

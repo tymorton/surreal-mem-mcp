@@ -46,9 +46,16 @@ impl SurrealClient {
         scope: &str,
         agent_id: Option<&str>,
         session_id: Option<&str>,
+        author_agent_id: Option<&str>,
+        ttl_days: Option<u32>,
     ) -> Result<String, Box<dyn std::error::Error>> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().to_rfc3339();
+
+        // Compute expires_at if ttl_days is provided
+        let expires_at: Option<String> = ttl_days.map(|days| {
+            (Utc::now() + chrono::Duration::days(days as i64)).to_rfc3339()
+        });
 
         let mut data = json!({
             "text": text,
@@ -60,6 +67,8 @@ impl SurrealClient {
             "scope": scope,
             "agent_id": agent_id,
             "session_id": session_id,
+            "author_agent_id": author_agent_id,
+            "expires_at": expires_at,
             "metadata": metadata
         });
 
@@ -111,11 +120,15 @@ impl SurrealClient {
             }
         }
 
-        // Phase 6: Orphaned Session TTL Cleanup
-        // Passively garbage collect ephemeral sessions older than 24 hours (86400 seconds)
-        // to prevent RocksDB bloating if an IDE crashes without calling `end_session`.
+        // Phase 6: Orphaned Session TTL Cleanup + Global/Agent TTL Eviction.
+        // Passively garbage collect:
+        //   (a) Ephemeral sessions older than 24 hours (crash/abandoned agents)
+        //   (b) Any memory whose expires_at has passed (opt-in global/agent TTL)
         let _ = self.db
-            .query("DELETE memory WHERE scope = 'session' AND time::unix(time::now()) - time::unix(type::datetime(created_at)) > 86400")
+            .query("
+                DELETE memory WHERE scope = 'session' AND time::unix(time::now()) - time::unix(type::datetime(created_at)) > 86400;
+                DELETE memory WHERE expires_at != NONE AND type::datetime(expires_at) < time::now();
+            ")
             .await;
 
         Ok(id)

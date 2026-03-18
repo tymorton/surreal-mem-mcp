@@ -10,23 +10,86 @@ Here is how you wire up `surreal-mem-mcp` to popular open-source autonomous agen
 
 ## 1. Openclaw & Nemoclaw
 
-**Openclaw** and **Nemoclaw** natively implement the Model Context Protocol directly in their Rust cores. Because they rely on autonomous "Hands" (capability modules) and robust inter-agent communication, they can inherently map MCP tools into their operations without requiring third-party pip installs.
+**Openclaw** and **Nemoclaw** implement MCP natively in their Rust cores. `surreal-mem-mcp` integrates as a standard MCP provider — no extra pip installs required.
 
-### How to Integrate
-In your Openclaw or Nemoclaw deployment configuration, you register `surreal-mem-mcp` directly as an MCP provider. Because these frameworks manage their own multi-agent orchestrations, you can map the `agent_id` parameter dynamically so each sub-agent maintains memory isolation.
+> **Transport:** `surreal-mem-mcp` runs HTTP/SSE only. STDIO is not supported. If you accidentally point Openclaw at the binary expecting STDIO, issue a `GET /` to confirm the transport — the server returns a JSON info payload with the correct SSE endpoint.
+
+### Step 1 — Register the Server
+
+Point Openclaw at the running HTTP/SSE daemon:
 
 ```yaml
-# Inside your Openclaw MCP configuration
+# openclaw_config.yaml
 mcp_servers:
   surreal-memory:
-    command: "target/release/surreal-mem-mcp" # Or the executed binary path
-    env:
-      SURREAL_DB_PATH: "memory_store"
-      PORT: "3000"
+    type: sse
+    url: "http://127.0.0.1:3000/sse"
 ```
-*Note: Depending on Openclaw's exact connector implementation, you can either trigger this via standard STDIO execution or by connecting directly to the running `http://localhost:3000/sse` HTTP/SSE stream.*
+
+Start the daemon before launching your Openclaw swarm:
+
+```bash
+./surreal-mem-mcp  # or the full binary path
+```
+
+### Step 2 — Inject Agent Identity via Headers (Recommended)
+
+The most reliable architecture for swarm deployments is **orchestrator-level header injection**. Instead of relying on each sub-agent LLM to remember its `agent_id`/`session_id`, your Openclaw middleware layer sets `X-Agent-Id` and `X-Session-Id` HTTP headers on every `/message` request. The daemon injects these as fallbacks into any tool call that omits them — explicit tool args always win.
+
+Here is a minimal Rust HTTP middleware snippet for an Openclaw Hand wrapper:
+
+```rust
+// In your Openclaw Hand implementation, wrap the MCP client calls:
+fn inject_identity_headers(req: &mut http::Request<Body>, hand: &HandContext) {
+    req.headers_mut().insert(
+        "x-agent-id",
+        hand.agent_id.parse().unwrap(),
+    );
+    req.headers_mut().insert(
+        "x-session-id",
+        hand.task_id.parse().unwrap(),
+    );
+}
+```
+
+With this in place, every `remember`, `search_memory`, `search_memory_graph`, and `promote_memory` call is automatically scoped to the correct agent and task — no LLM cooperation required.
+
+### Step 3 — Terminate Sessions via REST (Lifecycle Hook)
+
+When an Openclaw task completes, call the session terminate endpoint directly from your orchestrator. This eagerly prunes ephemeral session memories without requiring the LLM to call `end_session`:
+
+```rust
+// In your Openclaw task lifecycle manager, on task completion:
+let _ = reqwest::Client::new()
+    .delete(format!("http://127.0.0.1:3000/session/{}", task_id))
+    .send()
+    .await;
+```
+
+```bash
+# Or directly from a shell lifecycle hook:
+curl -X DELETE http://127.0.0.1:3000/session/<task_id>
+```
+
+### Step 4 — Pre-flight Index Check for Codebase Indexing
+
+In a multi-agent Openclaw swarm, multiple Hands may trigger `index_codebase` for the same repo concurrently. Use `check_index_status` first to avoid duplicate work:
+
+```json
+// MCP tool call — check before indexing
+{
+  "name": "check_index_status",
+  "arguments": { "path": "/workspace/myrepo" }
+}
+
+// Response: { "indexed": true, "file_count": 142, "func_count": 891, "last_indexed_at": "2026-03-17T..." }
+// If indexed: true, skip index_codebase. If false, proceed.
+```
+
+The indexer wraps all writes in a transaction, so even if two agents race past the check simultaneously, the writes will serialize safely.
 
 ---
+
 
 ## 2. LangChain
 

@@ -59,9 +59,12 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
         let file_hash = deterministic_hash("file", file_path);
         let file_id = format!("file:{}", file_hash);
 
-        // upsert file node
-        let _ = db.query(&format!("UPDATE file:⟨{}⟩ CONTENT {{ path: $path }}", file_hash))
+        let now = chrono::Utc::now().to_rfc3339();
+        
+        // upsert file node — indexed_at lets check_index_status report freshness
+        let _ = db.query(&format!("UPDATE file:⟨{}⟩ CONTENT {{ path: $path, indexed_at: $now }}", file_hash))
             .bind(("path", file_path))
+            .bind(("now", now))
             .await.map_err(|e| e.to_string())?;
 
         // upsert functions
@@ -77,8 +80,9 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
                 .bind(("row", func.row))
                 .await.map_err(|e| e.to_string())?;
 
-            // Contains edge
-            let _ = db.query(&format!("RELATE file:⟨{}⟩->contains->func:⟨{}⟩", file_hash, func_hash))
+            // Contains edge (Idempotent upsert instead of RELATE to prevent duplication)
+            let edge_id = format!("{}_{}", file_hash, func_hash);
+            let _ = db.query(&format!("UPDATE contains:⟨{}⟩ CONTENT {{ in: file:⟨{}⟩, out: func:⟨{}⟩ }}", edge_id, file_hash, func_hash))
                 .await.map_err(|e| e.to_string())?;
         }
 
@@ -95,8 +99,9 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
                 .bind(("row", cls.row))
                 .await.map_err(|e| e.to_string())?;
 
-            // Contains edge
-            let _ = db.query(&format!("RELATE file:⟨{}⟩->contains->class:⟨{}⟩", file_hash, cls_hash))
+            // Contains edge (Idempotent upsert instead of RELATE to prevent duplication)
+            let edge_id = format!("{}_{}", file_hash, cls_hash);
+            let _ = db.query(&format!("UPDATE contains:⟨{}⟩ CONTENT {{ in: file:⟨{}⟩, out: class:⟨{}⟩ }}", edge_id, file_hash, cls_hash))
                 .await.map_err(|e| e.to_string())?;
         }
     }
@@ -113,19 +118,33 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
                 if target_parts.len() == 2 {
                     let tb = target_parts[0];
                     let hash = target_parts[1];
-                    let _ = db.query(&format!("RELATE (SELECT id FROM file WHERE path = $path)->calls->{}:⟨{}⟩", tb, hash))
+                    // Idempotent edge UPSERT
+                    let edge_id = deterministic_hash("calls", &format!("{}_{}", file_path, hash));
+                    let _ = db.query(&format!("
+                        LET $src = (SELECT id FROM file WHERE path = $path LIMIT 1).id;
+                        IF $src != NONE THEN
+                            UPDATE calls:⟨{}⟩ CONTENT {{ in: $src[0], out: {}:⟨{}⟩ }}
+                        END
+                    ", edge_id, tb, hash))
                         .bind(("path", file_path.to_string()))
                         .await.map_err(|e| e.to_string())?;
                 }
             }
         }
-        
         for imp in &ast_data.imports {
-            let _ = db.query(&format!("UPDATE module:⟨{}⟩ CONTENT {{ name: $imp }}", imp))
+            let imp_hash = deterministic_hash("mod", imp);
+            let _ = db.query(&format!("UPDATE module:⟨{}⟩ CONTENT {{ name: $imp }}", imp_hash))
                 .bind(("imp", imp.clone()))
                 .await.map_err(|e| e.to_string())?;
             
-            let _ = db.query(&format!("RELATE (SELECT id FROM file WHERE path = $path)->imports->module:⟨{}⟩", imp))
+            // Idempotent edge UPSERT
+            let edge_id = deterministic_hash("imports", &format!("{}_{}", file_path, imp_hash));
+            let _ = db.query(&format!("
+                LET $src = (SELECT id FROM file WHERE path = $path LIMIT 1).id;
+                IF $src != NONE THEN
+                    UPDATE imports:⟨{}⟩ CONTENT {{ in: $src[0], out: module:⟨{}⟩ }}
+                END
+            ", edge_id, imp_hash))
                 .bind(("path", file_path.to_string()))
                 .await.map_err(|e| e.to_string())?;
         }
@@ -137,17 +156,12 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
         .map(|a| format!("file:{}", deterministic_hash("file", &a.filepath)))
         .collect();
 
-    // Since RELATE uses ON DELETE CASCADE in SurrealDB by default or leaves orphans, deleting the file handles contains/calls.
-    // Wait, SurrealDB Graph links aren't strictly cascaded by default for standard DELETES.
-    // Using DETACH-like logic: "DELETE func WHERE <-contains<-(file WHERE id NOT IN $active);"
-    // Actually simpler: 
+    // Phase 3: Prune stale files implicitly.
     let _ = db.query("
-        BEGIN TRANSACTION;
         LET $dead_files = (SELECT id FROM file WHERE id NOT IN $active);
         DELETE func WHERE <-contains<-($dead_files);
         DELETE class WHERE <-contains<-($dead_files);
         DELETE $dead_files;
-        COMMIT TRANSACTION;
     ")
     .bind(("active", active_file_ids))
     .await.map_err(|e| e.to_string())?;
