@@ -136,13 +136,13 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
             let safe_headline_ref = safe_headline.as_deref();
 
             // Embed the full text for precise vector search
-            let emb = db.get_embedding(&safe_text);
+            let emb = db.get_embedding(&safe_text).await;
 
             // Embed the headline separately so compressed searches can still
             // use vector similarity against the summary representation.
             let headline_emb = if let Some(hl) = safe_headline_ref {
                 if hl.len() > 10 {
-                    db.get_embedding(hl)
+                    db.get_embedding(hl).await
                 } else {
                     None
                 }
@@ -192,7 +192,7 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
             let limit = args.get("limit").and_then(|l| l.as_u64()).unwrap_or(5) as usize;
             let compressed = args.get("compressed").and_then(|c| c.as_bool()).unwrap_or(false);
 
-            let emb = db.get_embedding(query);
+            let emb = db.get_embedding(query).await;
 
             match db
                 .bayesian_search(query, emb, limit, scope, agent_id, session_id, compressed)
@@ -223,7 +223,7 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
             let session_id = args.get("session_id").and_then(|s| s.as_str());
             let max_depth = args.get("max_depth").and_then(|d| d.as_u64()).unwrap_or(5) as usize;
 
-            let emb = db.get_embedding(query);
+            let emb = db.get_embedding(query).await;
 
             match db
                 .bayesian_graph_search(query, emb, max_depth, scope, agent_id, session_id)
@@ -353,12 +353,13 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
                         (0, json!(null))
                     };
 
-                    let mut func_res = db.db()
+                    let func_rows: Vec<Value> = db.db()
                         .query("SELECT count() AS func_count FROM func WHERE path CONTAINS $path_prefix GROUP BY all")
                         .bind(("path_prefix", path))
                         .await
-                        .unwrap_or_else(|_| panic!());
-                    let func_rows: Vec<Value> = func_res.take(0).unwrap_or_default();
+                        .ok()
+                        .and_then(|mut r| r.take(0).ok())
+                        .unwrap_or_default();
                     let func_count = func_rows.first()
                         .and_then(|r| r.get("func_count"))
                         .and_then(|v| v.as_u64())

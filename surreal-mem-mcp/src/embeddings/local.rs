@@ -1,8 +1,8 @@
 use fastembed::{TextEmbedding, InitOptions, EmbeddingModel};
-use std::sync::RwLock;
+use tokio::sync::Mutex;
 
 pub struct LocalEmbedder {
-    model: RwLock<TextEmbedding>,
+    model: Mutex<TextEmbedding>,
 }
 
 impl LocalEmbedder {
@@ -11,15 +11,14 @@ impl LocalEmbedder {
             InitOptions::new(EmbeddingModel::JinaEmbeddingsV2BaseEN)
                 .with_show_download_progress(true)
         )?;
-        Ok(Self { model: RwLock::new(model) })
+        Ok(Self { model: Mutex::new(model) })
     }
 
-    pub fn get_embedding(&self, text: &str) -> Option<Vec<f32>> {
-        if let Ok(mut model) = self.model.write() {
-            if let Ok(embeddings) = model.embed(vec![text], None) {
-                 return embeddings.into_iter().next();
-            }
-        }
-        None
+    /// Asynchronously compute embeddings. Uses a Tokio Mutex so ONNX inference
+    /// (which can take tens of milliseconds) yields the thread back to the
+    /// Tokio runtime while waiting for the lock, rather than blocking it.
+    pub async fn get_embedding(&self, text: &str) -> Option<Vec<f32>> {
+        let mut model = self.model.lock().await;
+        model.embed(vec![text], None).ok()?.into_iter().next()
     }
 }

@@ -46,8 +46,8 @@ impl SurrealClient {
         Ok(client)
     }
 
-    pub fn get_embedding(&self, text: &str) -> Option<Vec<f32>> {
-        self.embedder.get_embedding(text)
+    pub async fn get_embedding(&self, text: &str) -> Option<Vec<f32>> {
+        self.embedder.get_embedding(text).await
     }
 
     async fn migrate_embeddings(&self) -> Result<(), Box<dyn std::error::Error>> {
@@ -61,10 +61,10 @@ impl SurrealClient {
             for row in rows {
                 if let Some(id) = row.get("id") {
                     let text = row.get("text").and_then(|t| t.as_str()).unwrap_or("");
-                    let new_text_emb = self.get_embedding(text);
+                    let new_text_emb = self.get_embedding(text).await;
                     
                     let new_headline_emb = if let Some(headline) = row.get("headline").and_then(|h| h.as_str()) {
-                        self.get_embedding(headline)
+                        self.get_embedding(headline).await
                     } else {
                         None
                     };
@@ -77,10 +77,22 @@ impl SurrealClient {
                             update_data["headline_embedding"] = json!(hemb);
                         }
                         
-                        let _ = self.db.query("UPDATE $id MERGE $data")
-                            .bind(("id", id.clone()))
-                            .bind(("data", update_data))
-                            .await?;
+                        // Extract the raw record ID string from the RecordId JSON object.
+                        // SurrealDB serializes RecordId as {"tb":"memory","id":{"String":"uuid"}}.
+                        // We reconstruct the SurrealQL record reference as a string: "memory:uuid"
+                        let raw_id = if let Some(inner) = id.get("id") {
+                            inner.get("String")
+                                .and_then(|s| s.as_str())
+                                .map(|s| s.to_string())
+                        } else {
+                            None
+                        };
+                        if let Some(rid) = raw_id {
+                            let _ = self.db.query("UPDATE type::thing('memory', $rid) MERGE $data")
+                                .bind(("rid", rid))
+                                .bind(("data", update_data))
+                                .await?;
+                        }
                     }
                 }
             }

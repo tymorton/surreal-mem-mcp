@@ -263,12 +263,12 @@ impl AppServer {
         println!("Indexing Result: {:?}", res);
         
         // Output stats
-        let mut f_res = db_client.db().query("SELECT count() FROM func GROUP BY all").await.unwrap();
-        let funcs: Vec<Value> = f_res.take(0).unwrap();
+        let mut f_res = db_client.db().query("SELECT count() AS func_count FROM func").await.unwrap();
+        let funcs: Vec<Value> = f_res.take(0).unwrap_or_default();
         println!("Total Functions found: {:?}", funcs);
 
-        let mut c_res = db_client.db().query("SELECT count() FROM class GROUP BY all").await.unwrap();
-        let classes: Vec<Value> = c_res.take(0).unwrap();
+        let mut c_res = db_client.db().query("SELECT count() AS class_count FROM class").await.unwrap();
+        let classes: Vec<Value> = c_res.take(0).unwrap_or_default();
         println!("Total Classes found: {:?}", classes);
     }
 }
