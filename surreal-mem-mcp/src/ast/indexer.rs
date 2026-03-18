@@ -122,9 +122,9 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
                     let edge_id = deterministic_hash("calls", &format!("{}_{}", file_path, hash));
                     let _ = db.query(&format!("
                         LET $src = (SELECT id FROM file WHERE path = $path LIMIT 1).id;
-                        IF $src != NONE THEN
+                        IF $src IS NOT NONE {{
                             UPDATE calls:⟨{}⟩ CONTENT {{ in: $src[0], out: {}:⟨{}⟩ }}
-                        END
+                        }}
                     ", edge_id, tb, hash))
                         .bind(("path", file_path.to_string()))
                         .await.map_err(|e| e.to_string())?;
@@ -141,9 +141,9 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
             let edge_id = deterministic_hash("imports", &format!("{}_{}", file_path, imp_hash));
             let _ = db.query(&format!("
                 LET $src = (SELECT id FROM file WHERE path = $path LIMIT 1).id;
-                IF $src != NONE THEN
+                IF $src IS NOT NONE {{
                     UPDATE imports:⟨{}⟩ CONTENT {{ in: $src[0], out: module:⟨{}⟩ }}
-                END
+                }}
             ", edge_id, imp_hash))
                 .bind(("path", file_path.to_string()))
                 .await.map_err(|e| e.to_string())?;

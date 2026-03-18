@@ -94,7 +94,7 @@ impl SurrealClient {
                 _ => "",
             };
             let related_q = format!(
-                "SELECT id, vector::similarity::cosine(embedding, $query_emb) AS sim FROM memory WHERE id != type::thing('memory', $id) AND status = 'active' AND embedding != NONE {} ORDER BY sim DESC LIMIT 3",
+                "SELECT id, vector::similarity::cosine(embedding, $query_emb) AS sim FROM memory WHERE id != type::thing('memory', $id) AND status = 'active' AND embedding IS NOT NONE {} ORDER BY sim DESC LIMIT 3",
                 scope_filter
             );
             let mut related_res = self
@@ -127,7 +127,7 @@ impl SurrealClient {
         let _ = self.db
             .query("
                 DELETE memory WHERE scope = 'session' AND time::unix(time::now()) - time::unix(type::datetime(created_at)) > 86400;
-                DELETE memory WHERE expires_at != NONE AND type::datetime(expires_at) < time::now();
+                DELETE memory WHERE expires_at IS NOT NONE AND type::datetime(expires_at) < time::now();
             ")
             .await;
 
