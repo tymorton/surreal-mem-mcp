@@ -219,8 +219,10 @@ This project stands on the shoulders of incredible open-source infrastructure. W
 
 ## OS Support Map
 Binaries are automatically built for the following architectures:
-- macOS (Apple Silicon: `aarch64` / Intel: `x86_64`)
+- macOS (Apple Silicon: `aarch64`)
 - Linux (`aarch64` / `x86_64`)
 - Windows (`x86_64`)
+
+> ⚠️ **macOS Intel (x86_64):** Pre-built binaries are not provided for Intel Macs due to a build-time incompatibility in the `ort-sys` crate — the ONNX Runtime xcframework bundles cannot be linked for `x86_64-apple-darwin` when compiling on ARM-based CI runners. Intel Mac users should [build from source](./CONTRIBUTING.md) using `cargo build --release`.
 
 > ⚠️ **Windows ARM64 (e.g. Snapdragon X Elite):** Pre-built binaries are not available for this platform in v0.1.0 due to a build-time incompatibility in a transitive dependency. Windows ARM64 users should [build from source](./CONTRIBUTING.md) using `cargo build --release`.
