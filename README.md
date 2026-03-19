@@ -81,6 +81,82 @@ SELECT name, ->calls->func.name AS calls_functions FROM func LIMIT 50;
 
 > 💡 **Tip:** Surrealist's **Graph View** tab will render your `->related_to->` and `->calls->` relationship edges as an interactive visual graph — no extra tooling required.
 
+## Code Graph Context (CGC)
+
+The Code Graph Context system is the codebase-intelligence layer of `surreal-mem-mcp`. Inspired by [CodeGraphContext](https://github.com/DevonSystems/CodeGraphContext), it gives your AI agent a structural map of your codebase — not just keyword search, but a navigable graph of how your code is actually connected.
+
+### How It Works
+
+When you call `index_codebase`, the daemon walks your project directory and runs every source file through [tree-sitter](https://tree-sitter.github.io/) — a battle-tested incremental parser. It extracts three types of **nodes** and three types of **edges** into SurrealDB:
+
+| Node Type | What It Represents |
+|---|---|
+| `file` | Every indexed source file, with absolute path and `indexed_at` timestamp |
+| `func` | Every function or method, with name, file path, and line number |
+| `class` | Every class or struct, with name, file path, and line number |
+| `module` | Every imported external or internal module |
+
+| Edge Type | What It Represents |
+|---|---|
+| `contains` | `file → func` or `file → class` — structural ownership |
+| `calls` | `file → func` — call-site relationships between functions |
+| `imports` | `file → module` — import/dependency relationships |
+
+**14 languages supported:** Python, Rust, JavaScript, TypeScript, Go, Java, C, C++, C#, Ruby, PHP, Swift, and more.
+
+### Why This Matters for Coding Sessions
+
+Without CGC, an AI agent asking *"what calls `authenticate_user`?"* must read files one at a time — burning tokens and missing connections. With the code graph loaded, `search_memory_graph` can traverse the `calls` and `imports` edges in a single `~67µs` native SurrealDB query, returning the entire causal chain in one tool call.
+
+**Example:** An agent investigating a broken authentication flow can ask one question and get back: which file defined the function, which files call it, which modules it imports, and which classes own it — all resolved in a single graph hop, not a dozen file reads.
+
+### Idempotent Re-Indexing
+
+Every node in the graph uses a **deterministic hash ID** rather than random UUIDs:
+- A file's ID is locked to its absolute path
+- A function's ID is locked to `(path + name + line number)`
+
+This means `index_codebase` can be safely re-run after edits — it will **upsert** changed nodes, **preserve** unchanged ones, and **prune** any stale nodes whose files no longer exist. No ghost data, no duplicates.
+
+### Recommended Coding Session Workflow
+
+```
+1. Session start — check if already indexed:
+   check_index_status(path="/your/project")
+   → Returns { indexed, file_count, func_count, last_indexed_at }
+
+2. If stale or not indexed:
+   index_codebase(path="/your/project")
+   → Walks all source files, builds the graph. Safe to re-run.
+
+3. During the session — traverse the code graph:
+   search_memory_graph(query="authentication middleware", scope="session", max_depth=5)
+   → Finds the closest matching node, then traverses contains/calls/imports
+     edges up to 5 hops deep, returning the full causal context chain.
+```
+
+> **💡 Swarm-safe:** In multi-agent setups, call `check_index_status` first. If `indexed: true` and `last_indexed_at` is recent, skip re-indexing to prevent duplicate CPU work across concurrent agents.
+
+### Browsing the Code Graph
+
+Use **[Surrealist](https://surrealdb.com/surrealist)** to visually explore your indexed codebase. Connect using `Local / Embedded RocksDB` pointed at `~/.surreal-mem-mcp/memory_store`, then run:
+
+```sql
+-- See all indexed files
+SELECT path, indexed_at FROM file ORDER BY indexed_at DESC;
+
+-- Find all functions in a specific file
+SELECT name, row FROM func WHERE path CONTAINS "surreal_client";
+
+-- Trace what a file calls
+SELECT path, ->calls->func.name AS calls_functions FROM file WHERE path CONTAINS "tools";
+
+-- Explore import relationships
+SELECT path, ->imports->module.name AS imported_modules FROM file LIMIT 20;
+```
+
+---
+
 ## MCP Capabilities
 
 ### Tools
@@ -91,6 +167,8 @@ SELECT name, ->calls->func.name AS calls_functions FROM func LIMIT 50;
 - `promote_memory`: Graduate a highly valuable `session` or `agent` memory to the `global` scope while preserving its graph edges and access frequency multipliers.
 - `update_behavioral_rules`: Append or rewrite the learned user preferences in the dynamic `MEMORY.md` file.
 - `end_session`: Instantly garbage collect and prune ephemeral `session` scoped memories from the RocksDB instance to prevent context bloat.
+- `index_codebase`: Walk a local directory and parse all source files into the SurrealDB code graph via tree-sitter (see [Code Graph Context](#code-graph-context-cgc)). Safe to re-run — idempotent by design.
+- `check_index_status`: Pre-flight check returning `{ indexed, file_count, func_count, last_indexed_at }` for a given path. Call before `index_codebase` to avoid duplicate work in multi-agent swarms.
 
 ### How Scoping Works (Orchestrator Integration)
 The human user **never** calls these parameters manually. The AI model autonomously invokes the tools via MCP. For the scoping logic to function perfectly, your Orchestrator (e.g., OpenCode, Gemini CLI, Code Puppy, custom LangChain pipelines) must inform the LLM of its current context:
