@@ -245,7 +245,7 @@ impl SurrealClient {
             FROM (
                 SELECT id, text, headline, embedding, created_at, access_count, type::number(count(->related_to)) AS related_count, search::score(1) AS bm25_score
                 FROM memory 
-                WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND embedding <|100|> $query_emb AND text @1@ $query
+                WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND (embedding <|100|> $query_emb OR text @1@ $query)
             )
             ORDER BY final_posterior_score DESC LIMIT $limit;
             "#, text_field = text_field));
@@ -383,7 +383,7 @@ impl SurrealClient {
             FROM (
                 SELECT id, text, embedding, created_at, access_count, type::number(count(->related_to)) AS related_count, search::score(1) AS bm25_score
                 FROM memory 
-                WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND embedding <|100|> $query_emb AND text @1@ $query
+                WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND (embedding <|100|> $query_emb OR text @1@ $query)
             )
             ORDER BY ((vector::similarity::cosine(embedding, $query_emb) * 0.7 + bm25_score * 0.3) * (
                 math::pow(0.99, type::number(time::unix(time::now()) - time::unix(type::datetime(created_at))) / 86400.0) 
