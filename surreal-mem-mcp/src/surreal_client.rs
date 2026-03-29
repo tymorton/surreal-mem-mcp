@@ -20,20 +20,18 @@ impl SurrealClient {
         db.use_ns("surreal_mcp").use_db("memory").await?;
 
         // Initialize Analyzer and Index for BM25
-        db.query("DEFINE ANALYZER puppy_analyzer TOKENIZERS blank,class,camel,punct FILTERS lowercase,snowball(english);")
-            .await?.check()?;
+        let _ = db.query("DEFINE ANALYZER OVERWRITE puppy_analyzer TOKENIZERS blank,class,camel,punct FILTERS lowercase,snowball(english);")
+            .await;
 
-        db.query(
-            "DEFINE INDEX fts_content ON memory FIELDS text FULLTEXT ANALYZER puppy_analyzer BM25;",
+        let _ = db.query(
+            "DEFINE INDEX OVERWRITE fts_content ON memory FIELDS text FULLTEXT ANALYZER puppy_analyzer BM25;",
         )
-        .await?
-        .check()?;
+        .await;
 
-        db.query(
-            "DEFINE INDEX fts_headline ON memory FIELDS headline FULLTEXT ANALYZER puppy_analyzer BM25;",
+        let _ = db.query(
+            "DEFINE INDEX OVERWRITE fts_headline ON memory FIELDS headline FULLTEXT ANALYZER puppy_analyzer BM25;",
         )
-        .await?
-        .check()?;
+        .await;
 
         let embedder = Arc::new(LocalEmbedder::new()?);
         let client = Self {
