@@ -338,7 +338,7 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
         "check_index_status" => {
             let path = args.get("path").and_then(|p| p.as_str()).unwrap_or("").to_string();
             let res = db.db()
-                .query("SELECT count() AS file_count FROM file WHERE string::starts_with(path, $path_prefix) GROUP BY all; SELECT indexed_at FROM file WHERE string::starts_with(path, $path_prefix) ORDER BY indexed_at DESC LIMIT 1;")
+                .query("SELECT count() AS file_count FROM file WHERE string::starts_with(path, $path_prefix); SELECT indexed_at FROM file WHERE string::starts_with(path, $path_prefix) ORDER BY indexed_at DESC LIMIT 1;")
                 .bind(("path_prefix", path.clone()))
                 .await.map_err(|e| e.to_string());
 
@@ -379,7 +379,7 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
                 .unwrap_or(json!(null));
 
             let func_res = db.db()
-                .query("SELECT count() AS func_count FROM func WHERE string::starts_with(path, $path_prefix) GROUP BY all")
+                .query("SELECT count() AS func_count FROM func WHERE string::starts_with(path, $path_prefix)")
                 .bind(("path_prefix", path.clone()))
                 .await;
 
