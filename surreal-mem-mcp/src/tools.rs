@@ -337,51 +337,80 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
         }
         "check_index_status" => {
             let path = args.get("path").and_then(|p| p.as_str()).unwrap_or("").to_string();
-            match db.db()
-                .query("SELECT count() AS file_count, math::max(indexed_at) AS last_indexed_at FROM file WHERE path CONTAINS $path_prefix GROUP BY all")
+            let res = db.db()
+                .query("SELECT count() AS file_count, math::max(indexed_at) AS last_indexed_at FROM file WHERE string::starts_with(path, $path_prefix) GROUP BY all")
                 .bind(("path_prefix", path.clone()))
-                .await
-            {
-                Ok(mut res) => {
-                    let rows: Vec<Value> = res.take(0).unwrap_or_default();
-                    let (file_count, last_indexed_at) = if let Some(row) = rows.first() {
-                        (
-                            row.get("file_count").and_then(|v| v.as_u64()).unwrap_or(0),
-                            row.get("last_indexed_at").cloned().unwrap_or(json!(null)),
-                        )
+                .await.map_err(|e| e.to_string());
+
+            let mut query_res = match res {
+                Ok(r) => {
+                    match r.check() {
+                        Ok(checked_r) => Some(checked_r),
+                        Err(e) => {
+                            if e.to_string().contains("does not exist") {
+                                None
+                            } else {
+                                return json!({ "content": [{ "type": "text", "text": format!("SurrealDB error (file): {}", e) }] });
+                            }
+                        }
+                    }
+                },
+                Err(e) => {
+                    if e.to_string().contains("does not exist") {
+                        None
+                    } else {
+                        return json!({ "content": [{ "type": "text", "text": format!("DB Error: {}", e) }] });
+                    }
+                }
+            };
+
+            let rows: Vec<Value> = query_res.as_mut().and_then(|r| r.take(0).ok()).unwrap_or_default();
+            let (file_count, last_indexed_at) = if let Some(row) = rows.first() {
+                (
+                    row.get("file_count").and_then(|v| v.as_u64()).unwrap_or(0),
+                    row.get("last_indexed_at").cloned().unwrap_or(json!(null)),
+                )
                     } else {
                         (0, json!(null))
                     };
 
-                    let func_rows: Vec<Value> = db.db()
-                        .query("SELECT count() AS func_count FROM func WHERE path CONTAINS $path_prefix GROUP BY all")
-                        .bind(("path_prefix", path.clone()))
-                        .await
-                        .ok()
-                        .and_then(|mut r| r.take(0).ok())
-                        .unwrap_or_default();
-                    let func_count = func_rows.first()
-                        .and_then(|r| r.get("func_count"))
-                        .and_then(|v| v.as_u64())
-                        .unwrap_or(0);
+            let func_res = db.db()
+                .query("SELECT count() AS func_count FROM func WHERE string::starts_with(path, $path_prefix) GROUP BY all")
+                .bind(("path_prefix", path.clone()))
+                .await;
 
-                    json!({
-                        "content": [{
-                            "type": "text",
-                            "text": serde_json::to_string_pretty(&json!({
-                                "indexed": file_count > 0,
-                                "file_count": file_count,
-                                "func_count": func_count,
-                                "last_indexed_at": last_indexed_at
-                            })).unwrap_or_default()
-                        }]
-                    })
-                }
-                Err(e) => json!({
-                    "isError": true,
-                    "content": [{ "type": "text", "text": format!("Error checking index status: {}", e) }]
-                }),
-            }
+            let func_rows: Vec<Value> = match func_res {
+                Ok(r) => match r.check() {
+                    Ok(mut checked_r) => checked_r.take(0).unwrap_or_default(),
+                    Err(e) => {
+                        if e.to_string().contains("does not exist") {
+                            vec![]
+                        } else {
+                            return json!({ "content": [{ "type": "text", "text": format!("SurrealDB error (func): {}", e) }] });
+                        }
+                    }
+                },
+                Err(_) => vec![],
+            };
+
+            let func_count = func_rows.first()
+                .and_then(|r| r.get("func_count"))
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+
+            let result = json!({
+                "indexed": file_count > 0,
+                "file_count": file_count,
+                "func_count": func_count,
+                "last_indexed_at": last_indexed_at
+            });
+
+            json!({
+                "content": [{
+                    "type": "text",
+                    "text": serde_json::to_string(&result).unwrap_or_default()
+                }]
+            })
         }
         _ => json!({
             "isError": true,
