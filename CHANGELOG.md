@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.0] - 2026-03-29
+## [0.4.0] - 2026-03-29
 
 ### Changed
 - **SurrealDB v3 Upgrade**: Migrated the core database engine from SurrealDB `v1.0.0` to `v3.0.5` taking advantage of extreme latency improvements.
