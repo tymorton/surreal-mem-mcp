@@ -118,7 +118,7 @@ async fn streamable_post_handler(
                 },
                 "serverInfo": {
                     "name": "surreal-mem-mcp",
-                    "version": "0.2.0"
+                    "version": "0.3.0"
                 }
             })),
             error: None,
@@ -302,7 +302,7 @@ async fn message_handler(
                     },
                     "serverInfo": {
                         "name": "surreal-mem-mcp",
-                        "version": "0.2.0"
+                        "version": "0.3.0"
                     }
                 })),
                 error: None,

@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.3.0] - 2026-03-29
+
+### Added
+- **MCP 2025-03-26 Streamable HTTP Transport**: Added `POST /sse` handler implementing the new unified-endpoint transport introduced in the March 2025 MCP spec revision. The server now accepts JSON-RPC requests (including `initialize`) directly via `POST /sse` and responds synchronously in the HTTP response body — resolving the `405 Method Not Allowed` error clients received when connecting with updated MCP SDKs.
+- **`Mcp-Session-Id` Header**: All `POST /sse` responses now include an `Mcp-Session-Id` header for client session tracking per the 2025-03-26 spec.
+- **Dual Transport Support**: Both the new Streamable HTTP transport (`POST /sse`) and the legacy SSE transport (`GET /sse` + `POST /message?session_id=`) are now supported simultaneously, ensuring backward compatibility with older MCP clients.
+
+### Fixed
+- **`405 Method Not Allowed` on `initialize`**: MCP clients conforming to the 2025-03-26 spec sent `initialize` via `POST /sse`, which previously only accepted `GET`. This is now handled correctly.
+- **Xcode 26 / Clang 21 Linker**: Added `.cargo/config.toml` with the correct `-L` path for `clang_rt.osx` under the Xcode 26 toolchain, fixing local release builds on macOS.
+
+---
+
 ## [0.2.0] - 2026-03-18
 
 ### Added
@@ -58,5 +71,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Known Issues
 - **Windows ARM64 not supported in v0.1.0**: Pre-built binaries are not provided for Windows on ARM64 devices (e.g. Snapdragon X Elite laptops). This is caused by a build-time incompatibility in the `ring` crate (a transitive dependency of SurrealDB's TLS stack) when cross-compiling to `aarch64-pc-windows-msvc` on GitHub's CI runners. Windows ARM64 users should build from source using `cargo build --release` inside the `surreal-mem-mcp` directory. This will be resolved in a future release when an updated version of `ring` with ARM64 Windows support is available.
 
+[0.3.0]: https://github.com/tymorton/surreal-mem-mcp/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/tymorton/surreal-mem-mcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/tymorton/surreal-mem-mcp/releases/tag/v0.1.0
