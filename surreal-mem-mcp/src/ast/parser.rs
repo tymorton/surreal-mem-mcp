@@ -32,24 +32,24 @@ impl AstParser {
             .unwrap_or("");
 
         let language: Language = match ext {
-            "py" => tree_sitter_python::language(),
-            "rs" => tree_sitter_rust::language(),
-            "js" => tree_sitter_javascript::language(),
-            "ts" => tree_sitter_typescript::language_typescript(),
-            "tsx" => tree_sitter_typescript::language_tsx(),
-            "go" => tree_sitter_go::language(),
-            "java" => tree_sitter_java::language(),
-            "cpp" | "cc" | "cxx" | "hpp" => tree_sitter_cpp::language(),
-            "c" | "h" => tree_sitter_c::language(),
-            "cs" => tree_sitter_c_sharp::language(),
-            "rb" => tree_sitter_ruby::language(),
-            "php" => tree_sitter_php::language(),
-            "swift" => tree_sitter_swift::language(),
+            "py" => tree_sitter_python::LANGUAGE.into(),
+            "rs" => tree_sitter_rust::LANGUAGE.into(),
+            "js" => tree_sitter_javascript::LANGUAGE.into(),
+            "ts" => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            "tsx" => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            "go" => tree_sitter_go::LANGUAGE.into(),
+            "java" => tree_sitter_java::LANGUAGE.into(),
+            "cpp" | "cc" | "cxx" | "hpp" => tree_sitter_cpp::LANGUAGE.into(),
+            "c" | "h" => tree_sitter_c::LANGUAGE.into(),
+            "cs" => tree_sitter_c_sharp::LANGUAGE.into(),
+            "rb" => tree_sitter_ruby::LANGUAGE.into(),
+            "php" => tree_sitter_php::LANGUAGE_PHP.into(),
+            "swift" => tree_sitter_swift::LANGUAGE.into(),
             _ => return Err(format!("Unsupported file extension: {}", ext)),
         };
 
         let mut parser = Parser::new();
-        parser.set_language(language).map_err(|e| e.to_string())?;
+        parser.set_language(&language).map_err(|e| e.to_string())?;
 
         let tree = parser.parse(source_code, None).ok_or("Failed to parse tree")?;
         let root_node = tree.root_node();
@@ -185,7 +185,7 @@ impl AstParser {
     fn extract_nodes(&self, language: &Language, query_str: &str, root: Node, source: &str, dest: &mut Vec<AstNode>, kind: &str) {
         use std::collections::HashSet;
         let mut seen = HashSet::new();
-        if let Ok(query) = Query::new(*language, query_str) {
+        if let Ok(query) = Query::new(&language, query_str) {
             let mut cursor = QueryCursor::new();
             let mut matches = cursor.matches(&query, root, source.as_bytes());
             while let Some(m) = matches.next() {
@@ -212,7 +212,7 @@ impl AstParser {
     fn extract_names(&self, language: &Language, query_str: &str, root: Node, source: &str, dest: &mut Vec<String>) {
         use std::collections::HashSet;
         let mut seen = HashSet::new();
-        if let Ok(query) = Query::new(*language, query_str) {
+        if let Ok(query) = Query::new(&language, query_str) {
             let mut cursor = QueryCursor::new();
             let mut matches = cursor.matches(&query, root, source.as_bytes());
             while let Some(m) = matches.next() {

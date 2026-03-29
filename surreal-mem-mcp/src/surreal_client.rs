@@ -24,13 +24,13 @@ impl SurrealClient {
             .await?.check()?;
 
         db.query(
-            "DEFINE INDEX fts_content ON memory FIELDS text SEARCH ANALYZER puppy_analyzer BM25;",
+            "DEFINE INDEX fts_content ON memory FIELDS text FULLTEXT ANALYZER puppy_analyzer BM25;",
         )
         .await?
         .check()?;
 
         db.query(
-            "DEFINE INDEX fts_headline ON memory FIELDS headline SEARCH ANALYZER puppy_analyzer BM25;",
+            "DEFINE INDEX fts_headline ON memory FIELDS headline FULLTEXT ANALYZER puppy_analyzer BM25;",
         )
         .await?
         .check()?;
@@ -78,15 +78,16 @@ impl SurrealClient {
                         }
                         
                         // Extract the raw record ID string from the RecordId JSON object.
-                        // SurrealDB serializes RecordId as {"tb":"memory","id":{"String":"uuid"}}.
-                        // We reconstruct the SurrealQL record reference as a string: "memory:uuid"
-                        let raw_id = if let Some(inner) = id.get("id") {
-                            inner.get("String")
-                                .and_then(|s| s.as_str())
-                                .map(|s| s.to_string())
-                        } else {
-                            None
-                        };
+                        // SurrealDB v3: RecordId serializes as {"tb":"memory","id":"uuid"} (direct string).
+                        // SurrealDB v1/v2 fallback: {"tb":"memory","id":{"String":"uuid"}}.
+                        let raw_id = id.get("id")
+                            .and_then(|v| v.as_str())
+                            .or_else(|| {
+                                id.get("id")
+                                    .and_then(|inner| inner.get("String"))
+                                    .and_then(|s| s.as_str())
+                            })
+                            .map(|s| s.to_string());
                         if let Some(rid) = raw_id {
                             let _ = self.db.query("UPDATE type::thing('memory', $rid) MERGE $data")
                                 .bind(("rid", rid))
@@ -234,16 +235,16 @@ impl SurrealClient {
                 (vector::similarity::cosine(embedding, $query_emb) * 0.7 + bm25_score * 0.3) AS likelihood,
                 (
                     math::pow(0.99, type::number(time::unix(time::now()) - time::unix(type::datetime(created_at))) / 86400.0) 
-                    * math::min([1.0, 0.1 + (related_count * 0.1)])
+                    * math::clamp(0.1 + (related_count * 0.1), 0.0, 1.0)
                     * (1.0 + (access_count * 0.1))
                 ) AS prior_belief,
                 ((vector::similarity::cosine(embedding, $query_emb) * 0.7 + bm25_score * 0.3) * (
                     math::pow(0.99, type::number(time::unix(time::now()) - time::unix(type::datetime(created_at))) / 86400.0) 
-                    * math::min([1.0, 0.1 + (related_count * 0.1)])
+                    * math::clamp(0.1 + (related_count * 0.1), 0.0, 1.0)
                     * (1.0 + (access_count * 0.1))
                 )) AS final_posterior_score
             FROM (
-                SELECT id, text, headline, embedding, created_at, access_count, type::number(count(->related_to)) AS related_count, search::score(1) AS bm25_score
+                SELECT id, text, headline, embedding, created_at, access_count, type::number(array::len(->related_to)) AS related_count, search::score(1) AS bm25_score
                 FROM memory 
                 WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND embedding <|100|> $query_emb AND text @1@ $query
             )
@@ -261,16 +262,16 @@ impl SurrealClient {
                 (vector::similarity::cosine(embedding, $query_emb)) AS likelihood,
                 (
                     math::pow(0.99, type::number(time::unix(time::now()) - time::unix(type::datetime(created_at))) / 86400.0) 
-                    * math::min([1.0, 0.1 + (related_count * 0.1)])
+                    * math::clamp(0.1 + (related_count * 0.1), 0.0, 1.0)
                     * (1.0 + (access_count * 0.1))
                 ) AS prior_belief,
                 (vector::similarity::cosine(embedding, $query_emb) * (
                     math::pow(0.99, type::number(time::unix(time::now()) - time::unix(type::datetime(created_at))) / 86400.0) 
-                    * math::min([1.0, 0.1 + (related_count * 0.1)])
+                    * math::clamp(0.1 + (related_count * 0.1), 0.0, 1.0)
                     * (1.0 + (access_count * 0.1))
                 )) AS final_posterior_score
             FROM (
-                SELECT id, text, headline, embedding, created_at, access_count, type::number(count(->related_to)) AS related_count
+                SELECT id, text, headline, embedding, created_at, access_count, type::number(array::len(->related_to)) AS related_count
                 FROM memory
                 WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND embedding <|100|> $query_emb
             )
@@ -288,16 +289,16 @@ impl SurrealClient {
                 bm25_score AS likelihood,
                 (
                     math::pow(0.99, type::number(time::unix(time::now()) - time::unix(type::datetime(created_at))) / 86400.0) 
-                    * math::min([1.0, 0.1 + (related_count * 0.1)])
+                    * math::clamp(0.1 + (related_count * 0.1), 0.0, 1.0)
                     * (1.0 + (access_count * 0.1))
                 ) AS prior_belief,
                 (bm25_score * (
                     math::pow(0.99, type::number(time::unix(time::now()) - time::unix(type::datetime(created_at))) / 86400.0) 
-                    * math::min([1.0, 0.1 + (related_count * 0.1)])
+                    * math::clamp(0.1 + (related_count * 0.1), 0.0, 1.0)
                     * (1.0 + (access_count * 0.1))
                 )) AS final_posterior_score
             FROM (
-                SELECT id, text, headline, created_at, access_count, type::number(count(->related_to)) AS related_count, search::score(1) AS bm25_score
+                SELECT id, text, headline, created_at, access_count, type::number(array::len(->related_to)) AS related_count, search::score(1) AS bm25_score
                 FROM memory
                 WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND text @1@ $query
                 LIMIT 100
@@ -308,15 +309,15 @@ impl SurrealClient {
 
         let mut stmt = self.db.query(&q).bind(("limit", limit));
         if !query.is_empty() {
-            stmt = stmt.bind(("query", query));
+            stmt = stmt.bind(("query", query.to_string()));
         }
         if let Some(emb) = query_emb {
             stmt = stmt.bind(("query_emb", emb));
         }
 
         // Bind scope parameters securely
-        let a_id = agent_id.unwrap_or("__NONE__");
-        let s_id = session_id.unwrap_or("__NONE__");
+        let a_id = agent_id.unwrap_or("__NONE__").to_string();
+        let s_id = session_id.unwrap_or("__NONE__").to_string();
         stmt = stmt.bind(("agent_id", a_id)).bind(("session_id", s_id));
 
         let mut res = stmt.await?;
@@ -381,13 +382,13 @@ impl SurrealClient {
             SELECT 
                 id
             FROM (
-                SELECT id, text, embedding, created_at, access_count, type::number(count(->related_to)) AS related_count, search::score(1) AS bm25_score
+                SELECT id, text, embedding, created_at, access_count, type::number(array::len(->related_to)) AS related_count, search::score(1) AS bm25_score
                 FROM memory 
                 WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND embedding <|100|> $query_emb AND text @1@ $query
             )
             ORDER BY ((vector::similarity::cosine(embedding, $query_emb) * 0.7 + bm25_score * 0.3) * (
                 math::pow(0.99, type::number(time::unix(time::now()) - time::unix(type::datetime(created_at))) / 86400.0) 
-                * math::min([1.0, 0.1 + (related_count * 0.1)])
+                * math::clamp(0.1 + (related_count * 0.1), 0.0, 1.0)
                 * (1.0 + (access_count * 0.1))
             )) DESC LIMIT 1;
             "#);
@@ -397,13 +398,13 @@ impl SurrealClient {
             SELECT 
                 id
             FROM (
-                SELECT id, text, embedding, created_at, access_count, type::number(count(->related_to)) AS related_count
+                SELECT id, text, embedding, created_at, access_count, type::number(array::len(->related_to)) AS related_count
                 FROM memory
                 WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND embedding <|100|> $query_emb
             )
             ORDER BY (vector::similarity::cosine(embedding, $query_emb) * (
                 math::pow(0.99, type::number(time::unix(time::now()) - time::unix(type::datetime(created_at))) / 86400.0) 
-                * math::min([1.0, 0.1 + (related_count * 0.1)])
+                * math::clamp(0.1 + (related_count * 0.1), 0.0, 1.0)
                 * (1.0 + (access_count * 0.1))
             )) DESC LIMIT 1;
             "#);
@@ -413,14 +414,14 @@ impl SurrealClient {
             SELECT 
                 id
             FROM (
-                SELECT id, text, created_at, access_count, type::number(count(->related_to)) AS related_count, search::score(1) AS bm25_score
+                SELECT id, text, created_at, access_count, type::number(array::len(->related_to)) AS related_count, search::score(1) AS bm25_score
                 FROM memory
                 WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND text @1@ $query
                 LIMIT 100
             )
             ORDER BY (bm25_score * (
                 math::pow(0.99, type::number(time::unix(time::now()) - time::unix(type::datetime(created_at))) / 86400.0) 
-                * math::min([1.0, 0.1 + (related_count * 0.1)])
+                * math::clamp(0.1 + (related_count * 0.1), 0.0, 1.0)
                 * (1.0 + (access_count * 0.1))
             )) DESC LIMIT 1;
             "#);
@@ -428,14 +429,14 @@ impl SurrealClient {
 
         let mut stmt = self.db.query(&q);
         if !query.is_empty() {
-            stmt = stmt.bind(("query", query));
+            stmt = stmt.bind(("query", query.to_string()));
         }
         if let Some(emb) = query_emb {
             stmt = stmt.bind(("query_emb", emb));
         }
 
-        let a_id = agent_id.unwrap_or("__NONE__");
-        let s_id = session_id.unwrap_or("__NONE__");
+        let a_id = agent_id.unwrap_or("__NONE__").to_string();
+        let s_id = session_id.unwrap_or("__NONE__").to_string();
         stmt = stmt.bind(("agent_id", a_id)).bind(("session_id", s_id));
 
         let mut res = stmt.await?;
@@ -495,9 +496,10 @@ impl SurrealClient {
     }
 
     pub async fn end_session(&self, session_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let sid = session_id.to_string();
         self.db
             .query("DELETE memory WHERE scope = 'session' AND session_id = $session_id")
-            .bind(("session_id", session_id))
+            .bind(("session_id", sid))
             .await?
             .check()?;
         Ok(())
@@ -509,10 +511,12 @@ impl SurrealClient {
         target_scope: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let q = "UPDATE type::thing($memory_id) SET scope = $target_scope";
+        let mid = memory_id.to_string();
+        let scope = target_scope.to_string();
         self.db
             .query(q)
-            .bind(("memory_id", memory_id))
-            .bind(("target_scope", target_scope))
+            .bind(("memory_id", mid))
+            .bind(("target_scope", scope))
             .await?
             .check()?;
         Ok(())

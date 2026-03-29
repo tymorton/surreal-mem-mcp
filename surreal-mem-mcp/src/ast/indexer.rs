@@ -60,12 +60,12 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
         let file_id = format!("file:{}", file_hash);
 
         let now = chrono::Utc::now().to_rfc3339();
-        
+
         // upsert file node — indexed_at lets check_index_status report freshness
-        let _ = db.query(&format!("UPDATE file:⟨{}⟩ CONTENT {{ path: $path, indexed_at: $now }}", file_hash))
-            .bind(("path", file_path))
+        let _ = db.query(&format!("UPSERT file:⟨{}⟩ CONTENT {{ path: $path, indexed_at: $now }}", file_hash))
+            .bind(("path", file_path.to_string()))
             .bind(("now", now))
-            .await.map_err(|e| e.to_string())?;
+            .await.map_err(|e| e.to_string())?.check().map_err(|e| e.to_string())?;
 
         // upsert functions
         for func in &ast_data.functions {
@@ -74,16 +74,16 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
             
             imports_map.insert(func.name.clone(), func_id.clone());
 
-            let _ = db.query(&format!("UPDATE func:⟨{}⟩ CONTENT {{ name: $name, path: $path, row: $row }}", func_hash))
+            let _ = db.query(&format!("UPSERT func:⟨{}⟩ CONTENT {{ name: $name, path: $path, row: $row }}", func_hash))
                 .bind(("name", func.name.clone()))
-                .bind(("path", file_path))
+                .bind(("path", file_path.to_string()))
                 .bind(("row", func.row))
-                .await.map_err(|e| e.to_string())?;
+                .await.map_err(|e| e.to_string())?.check().map_err(|e| e.to_string())?;
 
             // Contains edge (Idempotent upsert instead of RELATE to prevent duplication)
             let edge_id = format!("{}_{}", file_hash, func_hash);
-            let _ = db.query(&format!("UPDATE contains:⟨{}⟩ CONTENT {{ in: file:⟨{}⟩, out: func:⟨{}⟩ }}", edge_id, file_hash, func_hash))
-                .await.map_err(|e| e.to_string())?;
+            let _ = db.query(&format!("UPSERT contains:⟨{}⟩ CONTENT {{ in: file:⟨{}⟩, out: func:⟨{}⟩ }}", edge_id, file_hash, func_hash))
+                .await.map_err(|e| e.to_string())?.check().map_err(|e| e.to_string())?;
         }
 
         // upsert classes
@@ -93,16 +93,16 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
 
             imports_map.insert(cls.name.clone(), cls_id.clone());
 
-            let _ = db.query(&format!("UPDATE class:⟨{}⟩ CONTENT {{ name: $name, path: $path, row: $row }}", cls_hash))
+            let _ = db.query(&format!("UPSERT class:⟨{}⟩ CONTENT {{ name: $name, path: $path, row: $row }}", cls_hash))
                 .bind(("name", cls.name.clone()))
-                .bind(("path", file_path))
+                .bind(("path", file_path.to_string()))
                 .bind(("row", cls.row))
-                .await.map_err(|e| e.to_string())?;
+                .await.map_err(|e| e.to_string())?.check().map_err(|e| e.to_string())?;
 
             // Contains edge (Idempotent upsert instead of RELATE to prevent duplication)
             let edge_id = format!("{}_{}", file_hash, cls_hash);
-            let _ = db.query(&format!("UPDATE contains:⟨{}⟩ CONTENT {{ in: file:⟨{}⟩, out: class:⟨{}⟩ }}", edge_id, file_hash, cls_hash))
-                .await.map_err(|e| e.to_string())?;
+            let _ = db.query(&format!("UPSERT contains:⟨{}⟩ CONTENT {{ in: file:⟨{}⟩, out: class:⟨{}⟩ }}", edge_id, file_hash, cls_hash))
+                .await.map_err(|e| e.to_string())?.check().map_err(|e| e.to_string())?;
         }
     }
 
@@ -123,30 +123,30 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
                     let _ = db.query(&format!("
                         LET $src = (SELECT id FROM file WHERE path = $path LIMIT 1).id;
                         IF $src IS NOT NONE {{
-                            UPDATE calls:⟨{}⟩ CONTENT {{ in: $src[0], out: {}:⟨{}⟩ }}
+                            UPSERT calls:⟨{}⟩ CONTENT {{ in: $src[0], out: {}:⟨{}⟩ }}
                         }}
                     ", edge_id, tb, hash))
                         .bind(("path", file_path.to_string()))
-                        .await.map_err(|e| e.to_string())?;
+                        .await.map_err(|e| e.to_string())?.check().map_err(|e| e.to_string())?;
                 }
             }
         }
         for imp in &ast_data.imports {
             let imp_hash = deterministic_hash("mod", imp);
-            let _ = db.query(&format!("UPDATE module:⟨{}⟩ CONTENT {{ name: $imp }}", imp_hash))
+            let _ = db.query(&format!("UPSERT module:⟨{}⟩ CONTENT {{ name: $imp }}", imp_hash))
                 .bind(("imp", imp.clone()))
-                .await.map_err(|e| e.to_string())?;
+                .await.map_err(|e| e.to_string())?.check().map_err(|e| e.to_string())?;
             
             // Idempotent edge UPSERT
             let edge_id = deterministic_hash("imports", &format!("{}_{}", file_path, imp_hash));
             let _ = db.query(&format!("
                 LET $src = (SELECT id FROM file WHERE path = $path LIMIT 1).id;
                 IF $src IS NOT NONE {{
-                    UPDATE imports:⟨{}⟩ CONTENT {{ in: $src[0], out: module:⟨{}⟩ }}
+                    UPSERT imports:⟨{}⟩ CONTENT {{ in: $src[0], out: module:⟨{}⟩ }}
                 }}
             ", edge_id, imp_hash))
                 .bind(("path", file_path.to_string()))
-                .await.map_err(|e| e.to_string())?;
+                .await.map_err(|e| e.to_string())?.check().map_err(|e| e.to_string())?;
         }
     }
 
@@ -158,13 +158,13 @@ pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<
 
     // Phase 3: Prune stale files implicitly.
     let _ = db.query("
-        LET $dead_files = (SELECT id FROM file WHERE id NOT IN $active);
-        DELETE func WHERE <-contains<-($dead_files);
-        DELETE class WHERE <-contains<-($dead_files);
+        LET $dead_files = (SELECT value id FROM file WHERE id NOT IN $active);
+        DELETE func WHERE <-contains<-(file WHERE id IN $dead_files);
+        DELETE class WHERE <-contains<-(file WHERE id IN $dead_files);
         DELETE $dead_files;
     ")
     .bind(("active", active_file_ids))
-    .await.map_err(|e| e.to_string())?;
+    .await.map_err(|e| e.to_string())?.check().map_err(|e| e.to_string())?;
 
     Ok(format!("Indexed {} files successfully.", parsed_count))
 }

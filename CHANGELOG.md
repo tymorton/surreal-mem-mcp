@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-29
+
+### Changed
+- **SurrealDB v3 Upgrade**: Migrated the core database engine from SurrealDB `v1.0.0` to `v3.0.5` taking advantage of extreme latency improvements.
+- **Tree-Sitter Modernization**: Bumped all tree-sitter grammars and the core parsing library to `v0.26.0` (ABI version 15) to support the latest language syntax specifications.
+
+### Fixed
+- **SurrealQL Index Initialization**: Updated full-text indexes and graph relational syntax (`<-(file WHERE id IN ...)`) to conform to rigorous SurrealDB v3 specification requirements.
+- **AST Silent Drop Prevention**: Handled latent asynchronous errors via `.check()?` ensuring edge and node creations don't fail silently.
+- **Database Upserts**: Replaced generic `UPDATE` statements within the codebase indexer with `UPSERT` statements perfectly matching the new v3 schema constraints.
+
 ### Added
 - **Embedded Sovereign ONNX Embedding Engine**: Replaced the external HTTP-dependent Ollama/LM Studio embedding client with an in-process `fastembed-rs`-powered `JinaEmbeddingsV2BaseEN` ONNX model. The server now bundles vectorization natively — zero configuration required. No Ollama, no Python, no env vars.
 - **8,000 Token Context Window**: Jina Embeddings V2 grants a dramatically larger embedding context compared to legacy truncated models, with 768-dimensional output optimized for retrieval.

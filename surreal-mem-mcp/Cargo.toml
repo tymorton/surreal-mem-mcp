@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
-surrealdb = { version = "1.0.0", features = ["kv-rocksdb", "kv-mem"] }
+surrealdb = { version = "3.0.5", features = ["kv-rocksdb", "kv-mem"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 uuid = { version = "1.6", features = ["v4"] }
@@ -16,21 +16,21 @@ futures = "0.3"
 home = "0.5"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 dotenvy = "0.15"
-tree-sitter-python = "0.20.0"
+tree-sitter-python = "0.25.0"
 walkdir = "2.5.0"
-tree-sitter-rust = "0.20.0"
-tree-sitter = "0.20.10"
+tree-sitter-rust = "0.24.2"
+tree-sitter = "0.26.0"
 streaming-iterator = "0.1.9"
-tree-sitter-javascript = "0.20.0"
-tree-sitter-swift = "0.3.5"
-tree-sitter-ruby = "0.20.0"
-tree-sitter-java = "0.20.0"
-tree-sitter-go = "0.20.0"
-tree-sitter-c = "0.20.0"
-tree-sitter-typescript = "0.20.0"
-tree-sitter-php = "0.20.0"
-tree-sitter-c-sharp = "0.20.0"
-tree-sitter-cpp = "0.20.0"
+tree-sitter-javascript = "0.25.0"
+tree-sitter-swift = "0.7.1"
+tree-sitter-ruby = "0.23.1"
+tree-sitter-java = "0.23.5"
+tree-sitter-go = "0.25.0"
+tree-sitter-c = "0.24.1"
+tree-sitter-typescript = "0.23.2"
+tree-sitter-php = "0.24.2"
+tree-sitter-c-sharp = "0.23.1"
+tree-sitter-cpp = "0.23.4"
 regex = "1.12.3"
 lazy_static = "1.5.0"
 fastembed = "5.13.0"

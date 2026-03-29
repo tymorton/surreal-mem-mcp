@@ -336,10 +336,10 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
             }
         }
         "check_index_status" => {
-            let path = args.get("path").and_then(|p| p.as_str()).unwrap_or("");
+            let path = args.get("path").and_then(|p| p.as_str()).unwrap_or("").to_string();
             match db.db()
                 .query("SELECT count() AS file_count, math::max(indexed_at) AS last_indexed_at FROM file WHERE path CONTAINS $path_prefix GROUP BY all")
-                .bind(("path_prefix", path))
+                .bind(("path_prefix", path.clone()))
                 .await
             {
                 Ok(mut res) => {
@@ -355,7 +355,7 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
 
                     let func_rows: Vec<Value> = db.db()
                         .query("SELECT count() AS func_count FROM func WHERE path CONTAINS $path_prefix GROUP BY all")
-                        .bind(("path_prefix", path))
+                        .bind(("path_prefix", path.clone()))
                         .await
                         .ok()
                         .and_then(|mut r| r.take(0).ok())
