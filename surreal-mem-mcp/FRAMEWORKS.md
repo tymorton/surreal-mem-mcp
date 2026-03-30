@@ -8,72 +8,96 @@ Here is how you wire up `surreal-mem-mcp` to popular open-source autonomous agen
 
 ---
 
-## 1. Openclaw & Nemoclaw
+## 1. OpenClaw & NemoClaw
 
-**Openclaw** and **Nemoclaw** implement MCP natively in their Rust cores. `surreal-mem-mcp` integrates as a standard MCP provider — no extra pip installs required.
+> **Note:** This section was verified in production by [JuanAtLarge](https://github.com/JuanAtLarge), an OpenClaw autonomous agent. The integration pattern below is based on real testing of how OpenClaw sub-agents actually work — not assumptions.
 
-> **Transport:** `surreal-mem-mcp` runs HTTP/SSE only. STDIO is not supported. If you accidentally point Openclaw at the binary expecting STDIO, issue a `GET /` to confirm the transport — the server returns a JSON info payload with the correct SSE endpoint.
+### How OpenClaw Sub-Agents Actually Work
 
-### Step 1 — Register the Server
+OpenClaw sub-agents are **isolated runtime sessions**. They do not maintain a live MCP/SSE connection. Pointing them at the SSE endpoint directly does not work — they receive context only at session start via file injection.
 
-Point Openclaw at the running HTTP/SSE daemon:
+The correct integration uses OpenClaw's `agents.defaults.memorySearch.extraPaths` config to inject a markdown snapshot of surreal-mem into every agent session automatically.
 
-```yaml
-# openclaw_config.yaml
-mcp_servers:
-  surreal-memory:
-    type: sse
-    url: "http://127.0.0.1:3000/sse"
-```
-
-Start the daemon before launching your Openclaw swarm:
+### Step 1 — Start the Daemon
 
 ```bash
-./surreal-mem-mcp  # or the full binary path
+# Default port: 3333 (set via PORT env var)
+./surreal-mem-mcp
+# or via LaunchAgent on macOS for auto-start on login
 ```
 
-### Step 2 — Inject Agent Identity via Headers (Recommended)
+### Step 2 — Create the Sync Script
 
-The most reliable architecture for swarm deployments is **orchestrator-level header injection**. Instead of relying on each sub-agent LLM to remember its `agent_id`/`session_id`, your Openclaw middleware layer sets `X-Agent-Id` and `X-Session-Id` HTTP headers on every `/message` request. The daemon injects these as fallbacks into any tool call that omits them — explicit tool args always win.
+Create a sync script that queries surreal-mem and writes a markdown snapshot:
 
-Here is a minimal Rust HTTP middleware snippet for an Openclaw Hand wrapper:
+```bash
+# ~/.openclaw/workspace/scripts/sync-surreal-memory.js
+# Queries top global memories and writes to memory/surreal-context.md
+# See: https://github.com/tymorton/surreal-mem-mcp for the full script
+```
 
-```rust
-// In your Openclaw Hand implementation, wrap the MCP client calls:
-fn inject_identity_headers(req: &mut http::Request<Body>, hand: &HandContext) {
-    req.headers_mut().insert(
-        "x-agent-id",
-        hand.agent_id.parse().unwrap(),
-    );
-    req.headers_mut().insert(
-        "x-session-id",
-        hand.task_id.parse().unwrap(),
-    );
+The script uses the SSE/JSON-RPC transport to call `search_memory` with a broad query and formats the results as markdown with Bayesian scores.
+
+### Step 3 — Configure extraPaths in openclaw.json
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "memorySearch": {
+        "extraPaths": [
+          "memory/surreal-context.md"
+        ]
+      }
+    }
+  }
 }
 ```
 
-With this in place, every `remember`, `search_memory`, `search_memory_graph`, and `promote_memory` call is automatically scoped to the correct agent and task — no LLM cooperation required.
+This injects `surreal-context.md` into every session — main agent, sub-agents, heartbeat, and cron jobs — automatically at session start.
 
-### Step 3 — Terminate Sessions via REST (Lifecycle Hook)
+### Step 4 — Keep the Snapshot Fresh
 
-When an Openclaw task completes, call the session terminate endpoint directly from your orchestrator. This eagerly prunes ephemeral session memories without requiring the LLM to call `end_session`:
-
-```rust
-// In your Openclaw task lifecycle manager, on task completion:
-let _ = reqwest::Client::new()
-    .delete(format!("http://127.0.0.1:3000/session/{}", task_id))
-    .send()
-    .await;
-```
+**On gateway restart** — add to `BOOT.md` in your workspace:
 
 ```bash
-# Or directly from a shell lifecycle hook:
-curl -X DELETE http://127.0.0.1:3000/session/<task_id>
+node ~/.openclaw/workspace/scripts/sync-surreal-memory.js
 ```
 
-### Step 4 — Pre-flight Index Check for Codebase Indexing
+**On every new session** — add to `AGENTS.md` session startup steps:
 
-In a multi-agent Openclaw swarm, multiple Hands may trigger `index_codebase` for the same repo concurrently. Use `check_index_status` first to avoid duplicate work:
+```bash
+node ~/.openclaw/workspace/scripts/sync-surreal-memory.js 2>/dev/null
+```
+
+**Before spawning sub-agents** — run the sync immediately before `sessions_spawn` so the sub-agent gets the latest memories injected at start.
+
+This ensures sub-agents always have a fresh snapshot without a cron timer.
+
+### Step 5 — Claude Code via ACP (Standard MCP Registration)
+
+For Claude Code sessions spawned via OpenClaw's ACP harness, standard MCP registration works:
+
+```bash
+claude mcp add --transport sse surreal-mem-mcp http://127.0.0.1:3333/sse --scope user
+```
+
+### Verified Results
+
+After setup, sub-agents spawned with zero manual context injection were verified to:
+
+| Test | Result |
+|---|---|
+| Recall agent identity, user name, business details | ✅ |
+| Recall specific credential IDs and project file paths | ✅ |
+| Execute tasks autonomously using memorized paths | ✅ |
+| Correctly apply behavior rules (require approval before external actions) | ✅ — cited source files |
+| Access detailed session history from daily memory files | ✅ |
+| Semantic search across memories (not just keyword match) | ✅ — ONNX embeddings |
+
+### Step 6 — Pre-flight Index Check for Codebase Indexing
+
+In a multi-agent OpenClaw swarm, multiple sub-agents may trigger `index_codebase` for the same repo concurrently. Use `check_index_status` first to avoid duplicate work:
 
 ```json
 // MCP tool call — check before indexing
