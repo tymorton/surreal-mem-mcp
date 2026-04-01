@@ -134,3 +134,34 @@ The `text` is full-fidelity. The `headline` is a 1-2 sentence compressed summary
 ```
 
 This pattern maintains full memory resolution while keeping the active context window lean — the definition of lossless context memory.
+
+## 8. Dynamic Tool Proxying & Temporal Knowledge Graph (TKG) Telemetry
+
+As `surreal-mem-mcp` scales into an autonomous multi-agent gateway, robust tool observability and safety become paramount. Direct execution of unsandboxed capabilities or untracked API calls reduces reliability and limits iterative agent self-healing. To solve this, the server utilizes a **Sandboxed Execution Proxy Layer** integrated with a **Temporal Knowledge Graph (TKG)**.
+
+### The Execution Proxy Layer
+When an agent invokes a tool (e.g., executing a script, calling an API, or passing through to downstream MCPs), the request is intercepted by the proxy layer (`registry/proxy.rs`). 
+- **Security Guardrails**: All `local_script` executions explicitly bypass system shells (`sh -c`) by passing arguments via `tokio::process::Command::args()`. Environment variables are injected defensively, eliminating script injection and path traversal vectors.
+- **Protocol Normalization**: The proxy abstracts the underlying RPC mechanism. Whether the capability is a REST API or a nested JSON-RPC MCP server (`std::process::Stdio`), the agent receives a homogenous response.
+
+### TKG Telemetry Instrumentation
+As every capability is evaluated, the proxy records a Temporal Edge inside SurrealDB tracking its lifecycle.
+
+```sql
+RELATE session:$current_session->EXECUTED->capability:$tool_id SET 
+    success = true, 
+    duration_ms = 145, 
+    timestamp = time::now();
+```
+
+By logging these executions as graph edges, `surreal-mem-mcp` automatically builds a deep behavioral history of *how* tools are utilized. If an LLM needs to know "Which tools failed over the past hour?", it is a sub-millisecond graph query.
+
+### Self-Healing & Discovery Degradation
+Agent pipelines frequently break when external APIs time out or underlying scripts fail. 
+Our TKG implements an active **Degradation Check**:
+1. After every execution, the proxy inspects the past 3 `EXECUTED` edges for that tool.
+2. If all 3 resulted in `success = false`, the tool's `status` in the registry is updated to `'degraded'`.
+3. During `discover_capabilities` (the MCP `tools/list` endpoint), the server intercepts the tool description for any degraded tool and dynamically prepends: 
+   `[⚠️ DEGRADED: This tool has failed its last 3 executions. Use with caution or attempt to fix the underlying issue.]`
+
+This contextual injection ensures the LLM is acutely aware of failing tools *before* it attempts to use them, enabling true autonomous self-healing and dynamic pathfinding without hardcoding error fallbacks into the prompt.

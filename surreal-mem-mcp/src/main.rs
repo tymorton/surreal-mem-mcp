@@ -6,6 +6,7 @@ mod resources;
 mod surreal_client;
 mod tools;
 pub mod security;
+pub mod registry;
 
 use std::env;
 use std::sync::Arc;
@@ -35,6 +36,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize the SurrealDB client
     let surreal_client = Arc::new(SurrealClient::connect(db_path).await?);
 
+    // ── Registry Startup Pipeline ──────────────────────────────────────
+    // Ingest skills, sync tool registry, build graph edges.
+    // Runs in background to avoid blocking server startup.
+    let db_for_registry = surreal_client.clone();
+    tokio::spawn(async move {
+        let db = db_for_registry.db();
+        let embedder = db_for_registry.embedder();
+
+        match registry::skill_ingestor::ingest_skills(db.clone(), embedder.clone()).await {
+            Ok(msg) => println!("[registry] {}", msg),
+            Err(e) => println!("[registry] Skill ingestion error: {}", e),
+        }
+
+        match registry::tool_registry::sync_tool_registry(db.clone(), embedder.clone()).await {
+            Ok(msg) => println!("[registry] {}", msg),
+            Err(e) => println!("[registry] Tool sync error: {}", e),
+        }
+
+        match registry::graph_mapper::build_skill_tool_graph(db.clone(), embedder.clone()).await {
+            Ok(msg) => println!("[registry] {}", msg),
+            Err(e) => println!("[registry] Graph mapping error: {}", e),
+        }
+
+        println!("[registry] Startup pipeline complete.");
+    });
+
     let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{}", port);
 
@@ -46,3 +73,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
+

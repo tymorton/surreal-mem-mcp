@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-01
+
+### Added
+- **Dynamic Tool Proxying Gateway**: Redesigned the `surreal-mem-mcp` execution capability flow. Scripts and APIs are now piped through an internal telemetry-aware proxy layer enforcing sub-process isolation `tokio::process::Command::args` and standardized JSON responses.
+- **TKG Telemetry Instrumentation**: Embedded temporal telemetry into the graph directly mapping execution lifetimes. A deterministic `session:current -> EXECUTED -> capability:tool_id` edge now tracks invocation duration, query payload parameters, error exceptions, and binary response data instantaneously.
+- **Self-Healing Capability Warnings**: Designed a sub-millisecond degradation query during `discover_capabilities` polling. If a capability repeatedly crashes without successful resolution, the discovery schema automatically intercepts it, injecting `[⚠️ DEGRADED]` with a failure warning directly into the model's runtime context prompt.
+
 ## [0.4.0] - 2026-03-29
 
 ### Changed

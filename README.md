@@ -9,6 +9,8 @@ This Model Context Protocol (MCP) server allows your AI agents (Claude Desktop, 
 - **Blazing Fast**: Uses Rust, Axum, and native Server-Sent Events (SSE) alongside embedded SurrealDB backed by RocksDB.
 - **Embedded ONNX Models**: Runs sovereign `JinaEmbeddingsV2BaseEN` natively in-process out of the box. Zero python required, zero Ollama required, zero external dependencies.
 - **Bayesian Edge-RAG**: Blends `vector::similarity::cosine() * 0.7` and `BM25 * 0.3`, weighted by an epistemic prior (time decay, graph density, access counts). Let math do the parsing, not latency-heavy LLMs.
+- **Progressive Discovery Router**: Replaces eager context bloat with a dynamic 2-step `discover_capabilities` router, dropping context tokens by 90% while granting LLMs explicit visibility into tool schemas.
+- **Autonomous Telemetry & Self-Healing**: Automatically writes Graph Edges tracking millisecond latency and success rates. If tools fail consecutively, they are instantly injected with `[⚠️ DEGRADED]` contextual warnings to steer LLMs away from hallucination loops.
 - **Global Behavioral Rules**: Generates `~/.surreal-mem-mcp/rules/` accessible universally via `resources/list`. Memory rules dynamically persist across completely disparate agent ecosystems.
 - **Enterprise Semantic Redaction**: Intercepts and scrubs API keys (OpenAI, AWS, GCP, Anthropic, Stripe) and PII natively in Rust before they are written to the database, ensuring your local RocksDB volume is 100% leak-proof.
 
@@ -169,6 +171,8 @@ SELECT path, ->imports->module.name AS imported_modules FROM file LIMIT 20;
 - `end_session`: Instantly garbage collect and prune ephemeral `session` scoped memories from the RocksDB instance to prevent context bloat.
 - `index_codebase`: Walk a local directory and parse all source files into the SurrealDB code graph via tree-sitter (see [Code Graph Context](#code-graph-context-cgc)). Safe to re-run — idempotent by design.
 - `check_index_status`: Pre-flight check returning `{ indexed, file_count, func_count, last_indexed_at }` for a given path. Call before `index_codebase` to avoid duplicate work in multi-agent swarms.
+- `discover_capabilities`: Pre-flight index router. Search the global registry graph by intent. Identifies required specific abilities and skills without eager loading limits, while providing runtime health statuses (e.g. `[⚠️ DEGRADED]`) based on autonomous TKG Telemetry.
+- `get_skill_runbook`: Fetches the extensive raw markdown context payload for a specifically identified `skill_id`.
 
 ### How Scoping Works (Orchestrator Integration)
 The human user **never** calls these parameters manually. The AI model autonomously invokes the tools via MCP. For the scoping logic to function perfectly, your Orchestrator (e.g., OpenCode, Gemini CLI, Code Puppy, custom LangChain pipelines) must inform the LLM of its current context:

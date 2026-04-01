@@ -15,6 +15,9 @@ impl SurrealClient {
     pub fn db(&self) -> Arc<Surreal<Db>> {
         self.db.clone()
     }
+    pub fn embedder(&self) -> Arc<LocalEmbedder> {
+        self.embedder.clone()
+    }
     pub async fn connect(db_path: String) -> Result<Self, Box<dyn std::error::Error>> {
         let db = Surreal::new::<RocksDb>(db_path).await?;
         db.use_ns("surreal_mcp").use_db("memory").await?;
@@ -32,6 +35,25 @@ impl SurrealClient {
             "DEFINE INDEX OVERWRITE fts_headline ON memory FIELDS headline FULLTEXT ANALYZER puppy_analyzer BM25;",
         )
         .await;
+
+        // Registry indexes: skill, skill_chunk, tool
+        let _ = db.query(
+            "DEFINE INDEX OVERWRITE fts_skill_desc ON skill FIELDS description FULLTEXT ANALYZER puppy_analyzer BM25;",
+        ).await;
+
+        let _ = db.query(
+            "DEFINE INDEX OVERWRITE fts_skill_chunk ON skill_chunk FIELDS text FULLTEXT ANALYZER puppy_analyzer BM25;",
+        ).await;
+
+        let _ = db.query(
+            "DEFINE INDEX OVERWRITE fts_tool_desc ON tool FIELDS description FULLTEXT ANALYZER puppy_analyzer BM25;",
+        ).await;
+
+        // Vector indexes for KNN search (FastEmbed JinaBaseV2 = 768 dims, f32)
+        let _ = db.query("DEFINE INDEX OVERWRITE vec_memory ON memory FIELDS embedding MTREE DIMENSION 768 TYPE f32;").await;
+        let _ = db.query("DEFINE INDEX OVERWRITE vec_skill ON skill FIELDS embedding MTREE DIMENSION 768 TYPE f32;").await;
+        let _ = db.query("DEFINE INDEX OVERWRITE vec_skill_chunk ON skill_chunk FIELDS embedding MTREE DIMENSION 768 TYPE f32;").await;
+        let _ = db.query("DEFINE INDEX OVERWRITE vec_tool ON tool FIELDS embedding MTREE DIMENSION 768 TYPE f32;").await;
 
         let embedder = Arc::new(LocalEmbedder::new()?);
         let client = Self {
@@ -244,7 +266,7 @@ impl SurrealClient {
             FROM (
                 SELECT id, text, headline, embedding, created_at, access_count, type::number(array::len(->related_to)) AS related_count, search::score(1) AS bm25_score
                 FROM memory 
-                WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND embedding <|100|> $query_emb AND text @1@ $query
+                WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND text @1@ $query
             )
             ORDER BY final_posterior_score DESC LIMIT $limit;
             "#, text_field = text_field));
@@ -271,7 +293,7 @@ impl SurrealClient {
             FROM (
                 SELECT id, text, headline, embedding, created_at, access_count, type::number(array::len(->related_to)) AS related_count
                 FROM memory
-                WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id) AND embedding <|100|> $query_emb
+                WHERE status = 'active' AND (scope = 'global' OR agent_id = $agent_id OR session_id = $session_id)
             )
             ORDER BY final_posterior_score DESC LIMIT $limit;
             "#, text_field = text_field));

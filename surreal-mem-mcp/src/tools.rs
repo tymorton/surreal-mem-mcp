@@ -110,6 +110,75 @@ pub fn list_tools() -> Vec<Value> {
                 "required": ["path"]
             }
         }),
+        // ── Registry Discovery Tools ────────────────────────────────────
+        json!({
+            "name": "discover_capabilities",
+            "description": "Search for relevant skills and tools matching a natural language intent. Returns a concise ranked list — use get_skill_runbook to expand details. This is the primary entry point for progressive context disclosure.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "intent": { "type": "string", "description": "Natural language description of what you want to accomplish." }
+                },
+                "required": ["intent"]
+            }
+        }),
+        json!({
+            "name": "get_skill_runbook",
+            "description": "Retrieve the full markdown runbook for a skill, bundled with the execution context of all linked tools. Returns everything the agent needs to execute the skill.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "skill_id": { "type": "string", "description": "The skill record ID (e.g. 'skill:abc123')." }
+                },
+                "required": ["skill_id"]
+            }
+        }),
+        json!({
+            "name": "execute_capability",
+            "description": "Execute a linked tool capability directly from the memory proxy layer, whether it's a local script, API endpoint, or MCP server. Provide the target tool ID and an object of named arguments to pass to the tool.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "tool_id": { "type": "string", "description": "The exact ID of the tool you want to execute (e.g. 'tool:1234')." },
+                    "arguments": { "type": "object", "description": "A JSON object containing any arguments expected by the tool's execution context.", "additionalProperties": true }
+                },
+                "required": ["tool_id", "arguments"]
+            }
+        }),
+        json!({
+            "name": "sync_registry",
+            "description": "Re-run the full skill and tool ingestion pipeline. Call this after adding new skill files to the inbox or modifying tool_registry.json.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {}
+            }
+        }),
+        json!({
+            "name": "learn_skill",
+            "description": "Dynamically create or update a skill runbook directly in the database without writing files. Upserts by name (same name = update). Chunks and embeds the markdown body and rebuilds tool graph edges.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Unique skill name (used as deterministic ID)." },
+                    "description": { "type": "string", "description": "One-line description of the skill." },
+                    "intents": { "type": "array", "items": { "type": "string" }, "description": "Natural language intents this skill addresses." },
+                    "required_tools": { "type": "array", "items": { "type": "string" }, "description": "Names of tools this skill requires (must exist in the tool registry)." },
+                    "markdown_body": { "type": "string", "description": "Full markdown runbook content." }
+                },
+                "required": ["name", "description", "markdown_body"]
+            }
+        }),
+        json!({
+            "name": "remove_capability",
+            "description": "Delete a skill or tool from the registry, including associated chunks and graph edges. Accepts a skill:X or tool:Y record ID.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "capability_id": { "type": "string", "description": "The record ID to delete (e.g. 'skill:abc123' or 'tool:xyz456')." }
+                },
+                "required": ["capability_id"]
+            }
+        }),
     ]
 }
 
@@ -415,6 +484,95 @@ pub async fn call_tool(params: Value, db: Arc<SurrealClient>) -> Value {
                     "text": serde_json::to_string(&result).unwrap_or_default()
                 }]
             })
+        }
+        // ── Registry Discovery Tools ────────────────────────────────────
+        "discover_capabilities" => {
+            let intent = args.get("intent").and_then(|i| i.as_str()).unwrap_or("");
+            match crate::registry::discovery::discover_capabilities(
+                db.db(), db.embedder(), intent
+            ).await {
+                Ok(result) => json!({
+                    "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }]
+                }),
+                Err(e) => json!({
+                    "isError": true,
+                    "content": [{ "type": "text", "text": format!("Error: {}", e) }]
+                }),
+            }
+        }
+        "get_skill_runbook" => {
+            let skill_id = args.get("skill_id").and_then(|s| s.as_str()).unwrap_or("");
+            match crate::registry::discovery::get_skill_runbook(db.db(), skill_id).await {
+                Ok(result) => json!({
+                    "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }]
+                }),
+                Err(e) => json!({
+                    "isError": true,
+                    "content": [{ "type": "text", "text": format!("Error: {}", e) }]
+                }),
+            }
+        }
+        "execute_capability" => {
+            let tool_id = args.get("tool_id").and_then(|t| t.as_str()).unwrap_or("");
+            let arguments = args.get("arguments").cloned().unwrap_or_else(|| serde_json::json!({}));
+            match crate::registry::proxy::execute_capability(db.db(), tool_id, arguments).await {
+                Ok(result) => serde_json::json!({
+                    "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }]
+                }),
+                Err(e) => serde_json::json!({
+                    "isError": true,
+                    "content": [{ "type": "text", "text": format!("Error: {}", e) }]
+                }),
+            }
+        }
+        "sync_registry" => {
+            match crate::registry::discovery::sync_registry(db.db(), db.embedder()).await {
+                Ok(result) => json!({
+                    "content": [{ "type": "text", "text": result }]
+                }),
+                Err(e) => json!({
+                    "isError": true,
+                    "content": [{ "type": "text", "text": format!("Error: {}", e) }]
+                }),
+            }
+        }
+        "learn_skill" => {
+            let name = args.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            let description = args.get("description").and_then(|d| d.as_str()).unwrap_or("");
+            let intents: Vec<String> = args.get("intents")
+                .and_then(|i| i.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            let required_tools: Vec<String> = args.get("required_tools")
+                .and_then(|t| t.as_array())
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .unwrap_or_default();
+            let markdown_body = args.get("markdown_body").and_then(|m| m.as_str()).unwrap_or("");
+
+            match crate::registry::skill_ingestor::learn_skill(
+                db.db(), db.embedder(),
+                name, description, intents, required_tools, markdown_body
+            ).await {
+                Ok(result) => json!({
+                    "content": [{ "type": "text", "text": result }]
+                }),
+                Err(e) => json!({
+                    "isError": true,
+                    "content": [{ "type": "text", "text": format!("Error: {}", e) }]
+                }),
+            }
+        }
+        "remove_capability" => {
+            let capability_id = args.get("capability_id").and_then(|c| c.as_str()).unwrap_or("");
+            match crate::registry::discovery::remove_capability(db.db(), capability_id).await {
+                Ok(result) => json!({
+                    "content": [{ "type": "text", "text": result }]
+                }),
+                Err(e) => json!({
+                    "isError": true,
+                    "content": [{ "type": "text", "text": format!("Error: {}", e) }]
+                }),
+            }
         }
         _ => json!({
             "isError": true,
