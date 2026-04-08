@@ -23,7 +23,7 @@ Point Openclaw at the running HTTP/SSE daemon:
 mcp_servers:
   surreal-memory:
     type: sse
-    url: "http://127.0.0.1:3000/sse"
+    url: "http://127.0.0.1:24555/sse"
 ```
 
 Start the daemon before launching your Openclaw swarm:
@@ -61,14 +61,14 @@ When an Openclaw task completes, call the session terminate endpoint directly fr
 ```rust
 // In your Openclaw task lifecycle manager, on task completion:
 let _ = reqwest::Client::new()
-    .delete(format!("http://127.0.0.1:3000/session/{}", task_id))
+    .delete(format!("http://127.0.0.1:24555/session/{}", task_id))
     .send()
     .await;
 ```
 
 ```bash
 # Or directly from a shell lifecycle hook:
-curl -X DELETE http://127.0.0.1:3000/session/<task_id>
+curl -X DELETE http://127.0.0.1:24555/session/<task_id>
 ```
 
 ### Step 4 — Pre-flight Index Check for Codebase Indexing
@@ -111,7 +111,7 @@ from langchain.agents import initialize_agent, AgentType
 async def init_memory_agent():
     # 1. Connect to the Surreal-Mem-MCP SSE stream
     client = MultiServerMCPClient()
-    await client.connect_sse("surreal_memory", "http://localhost:3000/sse")
+    await client.connect_sse("surreal_memory", "http://localhost:24555/sse")
     
     # 2. Extract tools dynamically
     tools = client.get_tools()
@@ -148,7 +148,7 @@ from langchain_mcp_adapters.client import MultiServerMCPClient
 
 async def setup_crew():
     client = MultiServerMCPClient()
-    await client.connect_sse("memory_node", "http://localhost:3000/sse")
+    await client.connect_sse("memory_node", "http://localhost:24555/sse")
     memory_tools = client.get_tools()
 
     # Assign tools to a specific Crew member 
@@ -175,7 +175,7 @@ pip install llama-index-readers-mcp
 from llama_index.readers.mcp import MCPClient
 
 # Connect to the running Rust daemon
-mcp_client = MCPClient(url="http://localhost:3000/sse")
+mcp_client = MCPClient(url="http://localhost:24555/sse")
 tools = mcp_client.get_tools()
 
 # LlamaIndex agents can now autonomously decide when to query the graph vs when to insert

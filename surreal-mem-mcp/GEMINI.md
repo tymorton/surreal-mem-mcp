@@ -12,7 +12,7 @@ Use this configuration to connect the Gemini CLI to the Surreal-Mem-MCP server.
   "mcpServers": {
     "surreal-mem-mcp": {
       "type": "sse",
-      "url": "http://127.0.0.1:3000/sse"
+      "url": "http://127.0.0.1:24555/sse"
     }
   }
 }

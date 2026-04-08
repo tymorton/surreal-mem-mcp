@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use surrealdb::Surreal;
-use surrealdb::engine::local::Db;
+use surrealdb::engine::any::Any;
 use crate::embeddings::local::LocalEmbedder;
 
 // ── Config Types ────────────────────────────────────────────────────────
@@ -318,7 +318,7 @@ async fn discover_sse_tools(server: &McpServerConfig) -> Result<Vec<Value>, Stri
 // ── Main Sync Function ──────────────────────────────────────────────────
 
 pub async fn sync_tool_registry(
-    db: Arc<Surreal<Db>>,
+    db: Arc<Surreal<Any>>,
     embedder: Arc<LocalEmbedder>,
 ) -> Result<String, String> {
     let config_paths = collect_config_paths();

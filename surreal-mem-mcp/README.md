@@ -7,7 +7,7 @@ This Model Context Protocol (MCP) server allows your AI agents (Claude Desktop, 
 ## Features
 
 - **Blazing Fast**: Uses Rust, Axum, and native Server-Sent Events (SSE) alongside embedded SurrealDB backed by RocksDB.
-- **Embedded ONNX Models**: Runs sovereign `JinaEmbeddingsV2BaseEN` natively in-process out of the box. Zero python required, zero Ollama required, zero external dependencies.
+- **Embedded ONNX Models**: Runs sovereign `JinaEmbeddingsV2BaseEN` natively in-process out of the box. You can frictionlessly swap the mathematical engine to `NomicEmbedTextV15` or `AllMiniLML6V2` simply by changing `EMBEDDING_MODEL` in your `.env`—the background daemon will automatically detect dimension changes and passively auto-migrate your native graph embeddings! Zero python required, zero Ollama required, zero external dependencies.
 - **Bayesian Edge-RAG**: Blends `vector::similarity::cosine() * 0.7` and `BM25 * 0.3`, weighted by an epistemic prior (time decay, graph density, access counts). Let math do the parsing, not latency-heavy LLMs.
 - **Global Behavioral Rules**: Generates `~/.surreal-mem-mcp/rules/` accessible universally via `resources/list`. Memory rules dynamically persist across completely disparate agent ecosystems.
 - **Enterprise Semantic Redaction**: Intercepts and scrubs API keys (OpenAI, AWS, GCP, Anthropic, Stripe) and PII natively in Rust before they are written to the database, ensuring your local RocksDB volume is 100% leak-proof.
@@ -16,22 +16,29 @@ This Model Context Protocol (MCP) server allows your AI agents (Claude Desktop, 
 
 ## Installation & Setup
 
-Since the daemon bundles the fastembed-rs ONNX runtime, it requires zero external dependencies and zero configuration.
+Since the daemon interfaces with a centralized SurrealDB graph, we provide an automated boot script that brings up both the core database engine and the MCP proxy together over non-conflicting high ports.
 
-### Manual Setup
-You can build the MCP server from source:
-
-```bash
-cargo build --release
-```
-
-Run the server:
+### Native Initialization (`start.sh`)
+You can globally orchestrate both processes from source:
 
 ```bash
-./target/release/surreal-mem-mcp
+chmod +x start.sh
+./start.sh
 ```
 
-The server will begin streaming SSE connections locally on port `3000`. By default, the embedded 8k-context Jina ONNX model weights (`~150MB`) will be automatically downloaded and cached locally on first boot.
+**What this script does:**
+1. Spins up the Core SurrealDB engine (`rocksdb:memory_store`) bound safely to `127.0.0.1:24556`.
+2. Compiles (if necessary) and launches the MCP Proxy streaming SSE connections locally on port `24555`. 
+
+### Background Daemon (macOS)
+For a persistent "always on" graph, we provide a macOS `LaunchAgent`.
+```bash
+# Register the daemon natively
+launchctl load ~/Library/LaunchAgents/local.surreal-mem-mcp.plist
+```
+*(This plist automatically targets your `start.sh` so your memory survives device reboots natively)*
+
+By default, the embedded 8k-context Jina ONNX model weights (`~150MB`) will be automatically downloaded and cached locally on first boot.
 
 ## Data Storage & Database Location
 
@@ -131,7 +138,7 @@ Add the following configuration to `~/.config/code_puppy/mcp_servers.json`:
   "mcp_servers": {
     "surreal-mem-mcp": {
       "type": "sse",
-      "url": "http://127.0.0.1:3000/sse"
+      "url": "http://127.0.0.1:24555/sse"
     }
   }
 }
@@ -146,7 +153,7 @@ OpenCode defines its MCP servers within a global `~/.config/opencode/opencode.js
   "mcp": {
     "surreal-mem-mcp": {
       "type": "sse",
-      "url": "http://127.0.0.1:3000/sse"
+      "url": "http://127.0.0.1:24555/sse"
     }
   }
 }
@@ -161,7 +168,7 @@ In your Gemini playbook (`GEMINI.md` / `settings.json`), use the standard MCP sc
   "mcpServers": {
     "surreal-mem-mcp": {
       "type": "sse",
-      "url": "http://127.0.0.1:3000/sse"
+      "url": "http://127.0.0.1:24555/sse"
     }
   }
 }
@@ -172,7 +179,7 @@ In your Gemini playbook (`GEMINI.md` / `settings.json`), use the standard MCP sc
 For Anthropic's Claude Code CLI, the easiest configuration method is via the CLI itself. Run this command in your terminal to globally map the daemon:
 
 ```bash
-claude mcp add surreal-mem-mcp http://127.0.0.1:3000/sse
+claude mcp add surreal-mem-mcp http://127.0.0.1:24555/sse
 ```
 
 Alternatively, for project-specific mapping, add it manually to your project's `.claude/mcp.json` or global `~/.claude/settings.json`:
@@ -182,7 +189,7 @@ Alternatively, for project-specific mapping, add it manually to your project's `
   "mcpServers": {
     "surreal-mem-mcp": {
       "type": "sse",
-      "url": "http://127.0.0.1:3000/sse"
+      "url": "http://127.0.0.1:24555/sse"
     }
   }
 }
@@ -203,7 +210,7 @@ For Google's agent-first IDE, integration requires editing the application's nat
   "mcpServers": {
     "surreal-mem-mcp": {
       "type": "sse",
-      "url": "http://127.0.0.1:3000/sse"
+      "url": "http://127.0.0.1:24555/sse"
     }
   }
 }

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use surrealdb::Surreal;
-use surrealdb::engine::local::Db;
+use surrealdb::engine::any::Any;
 use crate::embeddings::local::LocalEmbedder;
 
 // ── YAML Frontmatter Types ─────────────────────────────────────────────
@@ -243,7 +243,7 @@ fn collect_skill_files() -> Vec<SkillFile> {
 // ── Main Ingestion Function ─────────────────────────────────────────────
 
 pub async fn ingest_skills(
-    db: Arc<Surreal<Db>>,
+    db: Arc<Surreal<Any>>,
     embedder: Arc<LocalEmbedder>,
 ) -> Result<String, String> {
     let skill_files = collect_skill_files();
@@ -367,7 +367,7 @@ pub async fn ingest_skills(
 /// Upsert a skill directly from LLM input (no filesystem needed).
 /// This is the `learn_skill` tool backend.
 pub async fn learn_skill(
-    db: Arc<Surreal<Db>>,
+    db: Arc<Surreal<Any>>,
     embedder: Arc<LocalEmbedder>,
     name: &str,
     description: &str,

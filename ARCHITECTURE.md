@@ -21,10 +21,11 @@ Most local AI agents default to SQLite for storage. While relational databases a
 
 When an AI needs to understand context 5 steps removed *(e.g. "What module imported the function that called the API that crashed?")*, a relational database requires `N+1` recursive SQL loops—where the agent asks for a file, reads the code, asks for the next file, reads the code, etc. This burns hundreds of thousands of tokens.
 
-**Surreal-Mem-MCP embeds SurrealDB (backed by high-performance RocksDB)**:
+**Surreal-Mem-MCP previously embedded RocksDB, but now operates as a Centralized WebSocket Daemon (`ws://127.0.0.1:24556`)**:
+- Running a single centralized SurrealDB engine eliminates file-locking conflicts when multiple orchestrators (e.g., Cursor, Antigravity, and Claude) attempt to access the memory graph concurrently.
 - Graph Traversal allows the `search_memory_graph` tool to instantly run a native 5-Hop query: `SELECT * FROM (SELECT <-contains<-file<-imports<-file FROM $match)`.
 - The database traverses these edges in `~67.88µs`, returning a single, synthesized JSON map of the entire causal chain to the LLM in *one* tool execution.
-- **Tradeoff:** The embedded RocksDB graph requires a higher active RAM footprint (`~155MB`) compared to standard SQLite deployments (`~58MB`). We determined the exponential token savings justified the baseline memory reservation.
+- **Tradeoff:** The dedicated local graph processes require a slightly higher active compute footprint. However, separating the Rust Axum SSE Proxy from the database engine provides total concurrent concurrency and stability across massive multi-agent flows without locking files.
 
 ## 3. Deterministic Graph Hashing (AST Indexing)
 When parsing local codebases into AST (Abstract Syntax Tree) Graph nodes, most naive systems generate random UUIDs (`Uuid::new_v4()`) for every inserted class, function, and file.

@@ -1,0 +1,6 @@
+# Ignore the testing harness code, logs, and venv completely
+*
+
+# Whitelist tracking for markdown documentation
+!.gitignore
+!*.md

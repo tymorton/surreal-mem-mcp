@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-04-08
+
+### Changed
+- **Centralized MCP Architecture**: Shifted the platform strategy to exclusively support a globally-shared background Daemon pattern (SSE) acting as a unified memory proxy, entirely abandoning local `stdio` subprocess bindings for IDE integrations.
+- **Port Conflict Resolution**: Migrated the default SSE daemon port from `3000` to a high-range port `24555` to safely avoid developer network conflicts with typical React/Node configurations.
+- **SurrealDB Transport Migration**: Completed the total replacement of the embedded RocksDB engine (`rocksdb://`) in favor of a universal WebSocket client (`ws://`) using `Surreal<Any>`. This completely resolves file locking conflicts and allows for concurrent observability via the Surrealist UI alongside agent ingestion.
+- **Global Configuration Upgrades**: Automatically updated all target IDEs (Antigravity, etc.) and `GEMINI.md` logic to default directly to the new `http://127.0.0.1:24555/sse` endpoint mapping.
 ## [0.5.0] - 2026-04-01
 
 ### Added

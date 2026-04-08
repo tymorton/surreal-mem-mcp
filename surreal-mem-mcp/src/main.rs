@@ -31,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Determine database path (default: local memory_store)
-    let db_path = env::var("SURREAL_DB_PATH").unwrap_or_else(|_| "memory_store".to_string());
+    let db_path = env::var("SURREAL_DB_PATH").unwrap_or_else(|_| "rocksdb://memory_store".to_string());
 
     // Initialize the SurrealDB client
     let surreal_client = Arc::new(SurrealClient::connect(db_path).await?);
@@ -62,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("[registry] Startup pipeline complete.");
     });
 
-    let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
+    let port = env::var("PORT").unwrap_or_else(|_| "24555".to_string());
     let addr = format!("0.0.0.0:{}", port);
 
     println!("Starting Surreal-Mem-MCP Server (SSE) on http://{}", addr);

@@ -2,7 +2,7 @@ use serde_json::{json, Value};
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::Duration;
-use surrealdb::engine::local::Db;
+use surrealdb::engine::any::Any;
 use surrealdb::Surreal;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
@@ -13,7 +13,7 @@ use reqwest::Client;
 
 /// Execute a linked capability directly from the memory proxy layer.
 pub async fn execute_capability(
-    db: Arc<Surreal<Db>>,
+    db: Arc<Surreal<Any>>,
     tool_id: &str,
     arguments: Value,
 ) -> Result<Value, String> {

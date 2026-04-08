@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use surrealdb::Surreal;
-use surrealdb::engine::local::Db;
+use surrealdb::engine::any::Any;
 use walkdir::WalkDir;
 use serde_json::json;
 use crate::ast::parser::{AstParser, AstResult};
@@ -14,7 +14,7 @@ fn deterministic_hash(prefix: &str, data: &str) -> String {
     format!("{}_{}", prefix, hasher.finish())
 }
 
-pub async fn index_local_codebase(path: String, db: Arc<Surreal<Db>>) -> Result<String, String> {
+pub async fn index_local_codebase(path: String, db: Arc<Surreal<Any>>) -> Result<String, String> {
     let mut ast_results = Vec::new();
 
     // 1. Walk directory and parse all python files

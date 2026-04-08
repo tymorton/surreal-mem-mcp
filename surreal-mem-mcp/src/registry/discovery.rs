@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use serde_json::{Value, json};
 use surrealdb::Surreal;
-use surrealdb::engine::local::Db;
+use surrealdb::engine::any::Any;
 use crate::embeddings::local::LocalEmbedder;
 use crate::registry::{skill_ingestor, tool_registry, graph_mapper};
 
@@ -10,7 +10,7 @@ use crate::registry::{skill_ingestor, tool_registry, graph_mapper};
 /// Search across skills and tools using Bayesian vector + BM25 fusion.
 /// Returns a concise summary — no full runbooks or schemas.
 pub async fn discover_capabilities(
-    db: Arc<Surreal<Db>>,
+    db: Arc<Surreal<Any>>,
     embedder: Arc<LocalEmbedder>,
     intent: &str,
 ) -> Result<Value, String> {
@@ -153,7 +153,7 @@ pub async fn discover_capabilities(
 
 /// Fetch the full skill runbook + type-specific execution context for linked tools.
 pub async fn get_skill_runbook(
-    db: Arc<Surreal<Db>>,
+    db: Arc<Surreal<Any>>,
     skill_id: &str,
 ) -> Result<Value, String> {
     // Fetch the skill record
@@ -269,7 +269,7 @@ fn build_tool_context(tool: &Value) -> Value {
 
 /// Re-run the full ingestion pipeline: skills → tools → graph edges.
 pub async fn sync_registry(
-    db: Arc<Surreal<Db>>,
+    db: Arc<Surreal<Any>>,
     embedder: Arc<LocalEmbedder>,
 ) -> Result<String, String> {
     let mut output = Vec::new();
@@ -296,7 +296,7 @@ pub async fn sync_registry(
 
 /// Delete a skill (+ its chunks and edges) or a tool (+ its edges).
 pub async fn remove_capability(
-    db: Arc<Surreal<Db>>,
+    db: Arc<Surreal<Any>>,
     capability_id: &str,
 ) -> Result<String, String> {
     if capability_id.starts_with("skill:") {

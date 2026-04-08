@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use serde_json::Value;
 use surrealdb::Surreal;
-use surrealdb::engine::local::Db;
+use surrealdb::engine::any::Any;
 use crate::embeddings::local::LocalEmbedder;
 
 fn deterministic_hash(data: &str) -> String {
@@ -22,7 +22,7 @@ fn deterministic_hash(data: &str) -> String {
 ///    the skill's embedding and each tool's embedding. Create edges for pairs
 ///    with similarity > 0.75 (if no explicit edge already exists).
 pub async fn build_skill_tool_graph(
-    db: Arc<Surreal<Db>>,
+    db: Arc<Surreal<Any>>,
     embedder: Arc<LocalEmbedder>,
 ) -> Result<String, String> {
     let mut edge_count = 0;

@@ -3,13 +3,26 @@
 
 ---
 
+## Executive Summary
+
+When providing artificial intelligence with custom capabilities (like codebase guidelines, runbooks, or API tools), a core challenge is how to inject that knowledge into the agent's context window. This benchmark evaluates the performance, cost, and accuracy of two fundamentally different approaches: **Eager Loading** (the industry default) vs. **Progressive Disclosure** (the dynamic graph approach employed by `surreal-mem-mcp`).
+
+Our benchmark results prove that `surreal-mem-mcp` maintains equivalent LLM reasoning and requirement adherence while **reducing idle token consumption by 97.6%** and **accelerating computational execution by ~76%**.
+
+### Key Terminology
+
+- **Eager Loading (Eager Baseline)**: The traditional approach of dumping *all* project guidelines, tool schemas, and environment contexts into the LLM system prompt on every single query. This blindly inflates token costs and creates a massive "context tax" before the agent even types a response.
+- **Progressive Disclosure**: A lean approach where the agent's prompt starts nearly empty. Instead of forced context, the agent uses semantic search tools (powered by `surreal-mem-mcp`) to dynamically retrieve and load *only* the specific knowledge explicitly required for the current task.
+
+---
+
 ## Test Environment
 
 | Component | Details |
 |-----------|---------|
 | Skills | 5 markdown files (1,920 words / 16,124 chars total) |
 | MCP Servers | 3 (github: 34 tools, filesystem: 11 tools, sequential-thinking: 1 tool) |
-| Model | Gemini 2.5 Pro |
+| Model | gemini-3.1-pro-preview |
 | Tokenizer | ~4 chars/token estimate (conservative) |
 
 ---
@@ -57,7 +70,7 @@ All raw content eagerly loaded into context window:
 
 ## Phase 3-4 Results: Progressive Disclosure
 
-*(To be filled after migration and optimized testing)*
+
 
 ### Tool Discovery Overhead
 
@@ -91,3 +104,83 @@ The dynamic Temporal Knowledge Graph proxy completely eliminated eager loading o
 | Prompt 3 Total (Python) | ~10,519 tokens | **~1,128 tokens** | **89.2% fewer tokens** |
 | **Average Savings** | ~10,520 tokens | **~1,027 tokens** | **~90.2% Token Reduction** |
 | **Time/Latency Impact** | ~35,700 ms Avg | **~8,545 ms Avg** | **76% Faster Execution via Proxied Graph Router** |
+
+
+
+
+
+
+
+## Automated Quality Benchmark (LLM-as-a-Judge)
+**Judge Evaluator**: `gemini-3.1-pro-preview`
+
+
+
+### Performance: `gemini-2.5-flash`
+#### Test Case: K8S
+- **Intent Query**: `I need to deploy my app. Can you write a deployment file following our project standards?`
+- **Eager Baseline Score**: 7/10
+- **Progressive Baseline Score**: 9/10
+- **Constraint Adherence**: `PASS`
+- **Nuance Loss**: Output B did not lose any critical nuance. In fact, Output B provided immediate value by generating a comprehensive template that explicitly incorporated standard best practices (resource limits, health probes, rolling updates), whereas Output A delayed the output to ask clarifying questions. Both successfully acknowledged the project standards.
+
+#### Test Case: GIT
+- **Intent Query**: `I need to clean up my git history before making a pull request. What commands should I run to follow our specific team workflow?`
+- **Eager Baseline Score**: 6/10
+- **Progressive Baseline Score**: 9/10
+- **Constraint Adherence**: `PASS`
+- **Nuance Loss**: Output B did not lose any critical instructions. In fact, Output A was cut off at the end and failed to provide the actual force push command, whereas Output B provided the complete steps including the crucial `--force-with-lease` safety recommendation.
+
+#### Test Case: PYTHON
+- **Intent Query**: `How do I write tests for my new Python service using fixtures and mocking as per our guidelines?`
+- **Eager Baseline Score**: 4/10
+- **Progressive Baseline Score**: 6/10
+- **Constraint Adherence**: `PASS`
+- **Nuance Loss**: Both outputs are severely truncated and fail to complete the explanation. Output A cuts off before showing any actual test functions or addressing the mocking requirement. Output B manages to show the test functions and begins the mocking section before cutting off. Output B relies on assuming the service exists, which is standard for progressive disclosure, whereas Output A spends tokens generating the service implementation, leading to it cutting off earlier.
+
+
+### Performance: `gemini-3.1-flash-lite-preview`
+#### Test Case: K8S
+- **Intent Query**: `I need to deploy my app. Can you write a deployment file following our project standards?`
+- **Eager Baseline Score**: 8/10
+- **Progressive Baseline Score**: 9/10
+- **Constraint Adherence**: `PASS`
+- **Nuance Loss**: Output B did not lose any critical instructions; in fact, it included better production practices like a securityContext and avoiding the ':latest' tag. Output A explicitly referenced the internal 'k8s-deployment.md' file but used the less ideal ':latest' image tag.
+
+#### Test Case: GIT
+- **Intent Query**: `I need to clean up my git history before making a pull request. What commands should I run to follow our specific team workflow?`
+- **Eager Baseline Score**: 9/10
+- **Progressive Baseline Score**: 9/10
+- **Constraint Adherence**: `PASS`
+- **Nuance Loss**: Both outputs are practically equivalent in quality and cover the same critical workflow steps. Output B omitted the explicit 'git fetch origin main' command block found in Output A, but still mentioned fetching in the introductory text. Conversely, Output B arguably improved the workflow by elevating the backup branch creation to Step 1 rather than leaving it as a footnote.
+
+#### Test Case: PYTHON
+- **Intent Query**: `How do I write tests for my new Python service using fixtures and mocking as per our guidelines?`
+- **Eager Baseline Score**: 9/10
+- **Progressive Baseline Score**: 8/10
+- **Constraint Adherence**: `PASS`
+- **Nuance Loss**: Output B missed the specific Python mocking nuance 'patch the object where it is imported' that Output A included. Additionally, Output B recommended using the 'mocker' fixture but its code example actually used 'MagicMock' directly via dependency injection, whereas Output A provided a consistent example using 'mocker.patch'.
+
+
+### Performance: `gemini-3.1-pro-preview`
+#### Test Case: K8S
+- **Intent Query**: `I need to deploy my app. Can you write a deployment file following our project standards?`
+- **Eager Baseline Score**: 7/10
+- **Progressive Baseline Score**: 9/10
+- **Constraint Adherence**: `PASS`
+- **Nuance Loss**: Output B did not miss any critical specialized instructions. In fact, despite using minimized context, Output B provided a much more comprehensive deployment manifest that included advanced project standards like security contexts, anti-affinity rules, and capability drops which Output A completely missed.
+
+#### Test Case: GIT
+- **Intent Query**: `I need to clean up my git history before making a pull request. What commands should I run to follow our specific team workflow?`
+- **Eager Baseline Score**: 9/10
+- **Progressive Baseline Score**: 10/10
+- **Constraint Adherence**: `PASS`
+- **Nuance Loss**: Output B did not lose any critical instructions compared to Output A. In fact, Output B provided slightly more comprehensive team-specific nuances, such as suggesting a backup branch and explicitly stating the golden rule of not rebasing shared branches. Both outputs are highly equivalent in their core technical steps.
+
+#### Test Case: PYTHON
+- **Intent Query**: `How do I write tests for my new Python service using fixtures and mocking as per our guidelines?`
+- **Eager Baseline Score**: 9/10
+- **Progressive Baseline Score**: 10/10
+- **Constraint Adherence**: `PASS`
+- **Nuance Loss**: Both outputs captured the critical specialized instructions (80% coverage, Red-Green-Refactor, pytest-mock, conftest.py). Output B did not lose any nuance and actually provided a slightly more comprehensive code example demonstrating both a happy path and an exception test.
+

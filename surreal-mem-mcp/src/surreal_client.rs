@@ -2,24 +2,25 @@ use chrono::Utc;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use surrealdb::Surreal;
-use surrealdb::engine::local::{Db, RocksDb};
+use surrealdb::engine::any::Any;
+use surrealdb::engine::any::connect;
 use uuid::Uuid;
 use crate::embeddings::local::LocalEmbedder;
 
 pub struct SurrealClient {
-    db: Arc<Surreal<Db>>,
+    db: Arc<Surreal<Any>>,
     embedder: Arc<LocalEmbedder>,
 }
 
 impl SurrealClient {
-    pub fn db(&self) -> Arc<Surreal<Db>> {
+    pub fn db(&self) -> Arc<Surreal<Any>> {
         self.db.clone()
     }
     pub fn embedder(&self) -> Arc<LocalEmbedder> {
         self.embedder.clone()
     }
     pub async fn connect(db_path: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let db = Surreal::new::<RocksDb>(db_path).await?;
+        let db = connect(db_path).await?;
         db.use_ns("surreal_mcp").use_db("memory").await?;
 
         // Initialize Analyzer and Index for BM25
@@ -49,19 +50,21 @@ impl SurrealClient {
             "DEFINE INDEX OVERWRITE fts_tool_desc ON tool FIELDS description FULLTEXT ANALYZER puppy_analyzer BM25;",
         ).await;
 
-        // Vector indexes for KNN search (FastEmbed JinaBaseV2 = 768 dims, f32)
-        let _ = db.query("DEFINE INDEX OVERWRITE vec_memory ON memory FIELDS embedding MTREE DIMENSION 768 TYPE f32;").await;
-        let _ = db.query("DEFINE INDEX OVERWRITE vec_skill ON skill FIELDS embedding MTREE DIMENSION 768 TYPE f32;").await;
-        let _ = db.query("DEFINE INDEX OVERWRITE vec_skill_chunk ON skill_chunk FIELDS embedding MTREE DIMENSION 768 TYPE f32;").await;
-        let _ = db.query("DEFINE INDEX OVERWRITE vec_tool ON tool FIELDS embedding MTREE DIMENSION 768 TYPE f32;").await;
-
         let embedder = Arc::new(LocalEmbedder::new()?);
+        let dim = embedder.dimensions();
+
+        // Vector indexes for KNN search using dynamic dimensions mapped from fastembed init
+        let _ = db.query(format!("DEFINE INDEX OVERWRITE vec_memory ON memory FIELDS embedding MTREE DIMENSION {} TYPE f32;", dim)).await;
+        let _ = db.query(format!("DEFINE INDEX OVERWRITE vec_skill ON skill FIELDS embedding MTREE DIMENSION {} TYPE f32;", dim)).await;
+        let _ = db.query(format!("DEFINE INDEX OVERWRITE vec_skill_chunk ON skill_chunk FIELDS embedding MTREE DIMENSION {} TYPE f32;", dim)).await;
+        let _ = db.query(format!("DEFINE INDEX OVERWRITE vec_tool ON tool FIELDS embedding MTREE DIMENSION {} TYPE f32;", dim)).await;
+
         let client = Self {
             db: Arc::new(db),
             embedder,
         };
         
-        client.migrate_embeddings().await?;
+        client.migrate_embeddings(dim).await?;
         
         Ok(client)
     }
@@ -70,14 +73,16 @@ impl SurrealClient {
         self.embedder.get_embedding(text).await
     }
 
-    async fn migrate_embeddings(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut res = self.db.query(
-            "SELECT id, text, headline FROM memory WHERE type::number(array::len(embedding)) != 768 AND type::number(array::len(embedding)) > 0"
-        ).await?;
+    async fn migrate_embeddings(&self, target_dim: usize) -> Result<(), Box<dyn std::error::Error>> {
+        let query = format!(
+            "SELECT id, text, headline FROM memory WHERE type::number(array::len(embedding)) != {} AND type::number(array::len(embedding)) > 0",
+            target_dim
+        );
+        let mut res = self.db.query(query).await?;
         
         let rows: Vec<Value> = res.take(0).unwrap_or_default();
         if !rows.is_empty() {
-            println!("Migrating {} memories to JinaEmbeddingsV2 768-d format...", rows.len());
+            println!("Migrating {} memories to {}-d format...", rows.len(), target_dim);
             for row in rows {
                 if let Some(id) = row.get("id") {
                     let text = row.get("text").and_then(|t| t.as_str()).unwrap_or("");
@@ -109,7 +114,7 @@ impl SurrealClient {
                             })
                             .map(|s| s.to_string());
                         if let Some(rid) = raw_id {
-                            let _ = self.db.query("UPDATE type::thing('memory', $rid) MERGE $data")
+                            let _ = self.db.query("UPDATE type::record('memory', $rid) MERGE $data")
                                 .bind(("rid", rid))
                                 .bind(("data", update_data))
                                 .await?;
@@ -166,7 +171,7 @@ impl SurrealClient {
         }
 
         self.db
-            .query("CREATE type::thing('memory', $id) CONTENT $data")
+            .query("CREATE type::record('memory', $id) CONTENT $data")
             .bind(("id", id.clone()))
             .bind(("data", data))
             .await?
@@ -180,7 +185,7 @@ impl SurrealClient {
                 _ => "",
             };
             let related_q = format!(
-                "SELECT id, vector::similarity::cosine(embedding, $query_emb) AS sim FROM memory WHERE id != type::thing('memory', $id) AND status = 'active' AND embedding IS NOT NONE {} ORDER BY sim DESC LIMIT 3",
+                "SELECT id, vector::similarity::cosine(embedding, $query_emb) AS sim FROM memory WHERE id != type::record('memory', $id) AND status = 'active' AND embedding IS NOT NONE {} ORDER BY sim DESC LIMIT 3",
                 scope_filter
             );
             let mut related_res = self
@@ -194,7 +199,7 @@ impl SurrealClient {
             for mem in similar_memories {
                 if let (Some(target_id), Some(sim)) = (mem.get("id"), mem.get("sim")) {
                     let relate_q =
-                        "RELATE type::thing('memory', $id)->related_to->$target SET sim = $sim";
+                        "LET $source = type::record('memory', $id); RELATE $source->related_to->$target SET sim = $sim;";
                     let _ = self
                         .db
                         .query(relate_q)
@@ -530,7 +535,7 @@ impl SurrealClient {
         memory_id: &str,
         target_scope: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let q = "UPDATE type::thing($memory_id) SET scope = $target_scope";
+        let q = "UPDATE type::record($memory_id) SET scope = $target_scope";
         let mid = memory_id.to_string();
         let scope = target_scope.to_string();
         self.db
